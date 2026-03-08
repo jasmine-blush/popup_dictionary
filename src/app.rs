@@ -363,6 +363,8 @@ impl eframe::App for MyApp {
                 crate::window_helper::move_window_x11(init_pos.x as i32, init_pos.y as i32)
             {
                 error!("{}", e);
+            } else {
+                self.init_pos = None;
             }
         }
 
