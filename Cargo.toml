@@ -1,7 +1,11 @@
 [package]
 name = "popup_dictionary"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
+description = "Japanese popup dictionary as a native window"
+readme = "README.md"
+repository = "https://github.com/jasmine-blush/popup_dictionary"
+license = "GNU General Public License v3.0"
 
 [dependencies]
 log = "0.4.28"
@@ -37,7 +41,10 @@ ksni = "0.3.3"
 
 [target.'cfg(windows)'.dependencies]
 tray-icon = "0.21.3"
-windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_System_Console"] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Console",
+] }
 
 [features]
 default = []
