@@ -3,8 +3,8 @@ use eframe::{
     epaint::text::{FontInsert, InsertFontFamily},
 };
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use log::{error, warn};
 use std::sync::{Arc, Mutex};
+use tracing::{error, warn};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
@@ -352,7 +352,7 @@ impl eframe::App for MyApp {
                 if let Err(e) =
                     crate::window_helper::move_window_hyprland(init_pos.x as i16, init_pos.y as i16)
                 {
-                    error!("{}", e);
+                    tracing::error!("{}", e);
                 } else {
                     self.init_pos = None;
                 }
@@ -362,7 +362,7 @@ impl eframe::App for MyApp {
             if let Err(e) =
                 crate::window_helper::move_window_x11(init_pos.x as i32, init_pos.y as i32)
             {
-                error!("{}", e);
+                tracing::error!("{}", e);
             } else {
                 self.init_pos = None;
             }

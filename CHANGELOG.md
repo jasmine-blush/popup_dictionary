@@ -11,9 +11,12 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
-- **Docs:** A CHANGELOG.md for easier tracking of changes.
+- **Docs:** A `CHANGELOG.md` for easier tracking of changes.
+- **CLI:** A `--log-file` argument allowing for verbose logging to a file.
 
 ### Changed
+
+- **Internal:** Migrated logging system from `log`/`env_logger` to `tracing`.
 
 ### Deprecated
 
@@ -29,7 +32,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
-- **Internal:** Added basic metadata to Cargo.toml.
+- **Internal:** Added basic metadata to `Cargo.toml`.
 
 ### Changed
 

@@ -3,6 +3,10 @@
     windows_subsystem = "windows"
 )]
 
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Console::AttachConsole;
 
@@ -85,9 +89,19 @@ struct Options {
     #[arg(long = "tray", help_heading = None)]
     show_tray_icon: bool,
 
-    /// Enable verbose logging
+    /// Enable verbose logging to terminal/console
     #[arg(long = "verbose", help_heading = None)]
     verbose: bool,
+
+    #[cfg(target_os = "linux")]
+    /// Enable logging to a file. A path to a file or directory can optionally be provided. Default: ~/.local/share/popup_dictionary/log.txt
+    #[arg(long = "log-file", help_heading = None)]
+    log_file: Option<Option<PathBuf>>,
+
+    #[cfg(target_os = "windows")]
+    /// Enable logging to a file. A path to a folder or file can optionally be provided. Default: %APPDATA%\popup_dictionary\log.txt
+    #[arg(long = "log-file", help_heading = None)]
+    log_file: Option<Option<PathBuf>>,
 }
 
 const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
@@ -105,18 +119,12 @@ fn main() -> ExitCode {
 
     let cli: Args = Args::parse();
 
-    #[cfg(debug_assertions)]
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .init();
-    #[cfg(not(debug_assertions))]
-    if cli.options.verbose {
-        env_logger::builder()
-            .filter_level(log::LevelFilter::max())
-            .init();
-    } else {
-        env_logger::init();
-    }
+    init_logging(cli.options.verbose, cli.options.log_file);
+    tracing::info!(
+        "{} {} starting.",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
 
     let config: popup_dictionary::app::Config = popup_dictionary::app::Config {
         initial_plugin: cli.options.initial_plugin,
@@ -135,39 +143,41 @@ fn main() -> ExitCode {
 
         if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.primary {
             if let Err(e) = popup_dictionary::primary(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.secondary {
             if let Err(e) = popup_dictionary::secondary(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
             if let Err(e) = popup_dictionary::watch(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
                     if let Err(e) = popup_dictionary::ocr(image, config) {
-                        eprintln!("Error: {e}");
+                        tracing::error!("Error: {e}");
                         return ExitCode::FAILURE;
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
+                    tracing::error!(
+                        "Error: OCR mode requires path or image data to be provided.\n{e}"
+                    );
                     return ExitCode::FAILURE;
                 }
             }
@@ -177,7 +187,7 @@ fn main() -> ExitCode {
                 crate::tray::spawn_tray_icon();
             }
             if let Err(e) = popup_dictionary::watch(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -190,29 +200,31 @@ fn main() -> ExitCode {
 
         if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
             if let Err(e) = popup_dictionary::watch(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
                     if let Err(e) = popup_dictionary::ocr(image, config) {
-                        eprintln!("Error: {e}");
+                        tracing::error!("Error: {e}");
                         return ExitCode::FAILURE;
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error: OCR mode requires path or image data to be provided.\n{e}");
+                    tracing::error!(
+                        "Error: OCR mode requires path or image data to be provided.\n{e}"
+                    );
                     return ExitCode::FAILURE;
                 }
             }
@@ -222,12 +234,82 @@ fn main() -> ExitCode {
                 crate::tray::spawn_tray_icon();
             }
             if let Err(e) = popup_dictionary::watch(config) {
-                eprintln!("Error: {e}");
+                tracing::error!("Error: {e}");
                 return ExitCode::FAILURE;
             }
         }
     }
     ExitCode::SUCCESS
+}
+
+fn init_logging(verbose: bool, log_file: Option<Option<PathBuf>>) {
+    let default_filter = if cfg!(debug_assertions) {
+        "debug"
+    } else if verbose {
+        "info"
+    } else {
+        "warn"
+    };
+
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
+
+    let terminal_logger = tracing_subscriber::fmt::layer()
+        .with_target(cfg!(debug_assertions))
+        .with_writer(std::io::stderr);
+
+    let mut log_file_error: Option<String> = None;
+
+    let file_logger = if let Some(log_path) = log_file {
+        let result: Result<std::fs::File, String> = (|| {
+            let path = match log_path {
+                Some(p) if p.is_dir() => p.join("log.txt"),
+                Some(p) => p,
+                None => {
+                    let base = match dirs::data_dir() {
+                        Some(path) => path,
+                        None => Err("No valid data path found in environment variables.")?,
+                    };
+                    base.join("popup_dictionary").join("log.txt")
+                }
+            };
+
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Log directory could not be created with error: {e}"))?;
+            }
+
+            std::fs::File::create(&path)
+                .map_err(|e| format!("Log file could not be created with error: {e}"))
+        })();
+
+        match result {
+            Ok(file) => Some(
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .with_writer(std::sync::Arc::new(file))
+                    .with_filter(EnvFilter::new("debug")),
+            ),
+            Err(e) => {
+                log_file_error = Some(e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(terminal_logger)
+        .with(file_logger)
+        .init();
+
+    tracing::debug!("Logger initialized.");
+
+    if let Some(e) = log_file_error {
+        tracing::warn!("Log file unavailable due to error: {e}");
+    }
 }
 
 fn get_image_for_ocr(ocr_arg: Option<PathBuf>) -> Result<DynamicImage, Box<dyn std::error::Error>> {

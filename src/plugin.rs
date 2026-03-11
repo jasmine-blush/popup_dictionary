@@ -1,7 +1,7 @@
 use egui::containers::Frame;
 use egui::{Context, Ui};
-use log::debug;
 use std::time::{Duration, Instant};
+use tracing::debug;
 
 use crate::app::MyApp;
 

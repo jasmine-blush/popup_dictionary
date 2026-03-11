@@ -8,8 +8,8 @@ repository = "https://github.com/jasmine-blush/popup_dictionary"
 license = "GNU General Public License v3.0"
 
 [dependencies]
-log = "0.4.28"
-env_logger = "0.11.8"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 eframe = "0.33.0"
 egui = "0.33.0"
 curl = "0.4.49"

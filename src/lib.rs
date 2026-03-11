@@ -121,15 +121,15 @@ pub fn watch(config: app::Config) -> Result<(), Box<dyn Error>> {
                         Ok(dynamic_image) => {
                             success = true;
                             if let Err(e) = ocr(dynamic_image, config.clone()) {
-                                eprintln!("Error: {e}");
+                                tracing::error!("Error: {e}");
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error: {e}");
+                            tracing::error!("Error: {e}");
                         }
                     },
                     Err(e) => {
-                        eprintln!("Error: {e}");
+                        tracing::error!("Error: {e}");
                     }
                 };
 
@@ -142,15 +142,15 @@ pub fn watch(config: app::Config) -> Result<(), Box<dyn Error>> {
                     ) {
                         let dynamic_image = DynamicImage::ImageRgba8(buffer);
                         if let Err(e) = ocr(dynamic_image, config.clone()) {
-                            eprintln!("Error: {e}");
+                            tracing::error!("Error: {e}");
                         }
                     } else {
-                        eprintln!("Error: Failed to create image buffer from raw pixels");
+                        tracing::error!("Error: Failed to create image buffer from raw pixels");
                     }
                 }
             } else if let Some(sentence) = current_content.text {
                 if let Err(e) = run(&sentence, config.clone()) {
-                    eprintln!("Error: {e}");
+                    tracing::error!("Error: {e}");
                 }
             }
             // Getting clipboard content again here instead of replacing with current_content
