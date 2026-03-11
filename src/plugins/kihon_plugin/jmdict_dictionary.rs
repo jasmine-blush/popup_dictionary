@@ -114,6 +114,7 @@ impl Dictionary {
         Self::parse_jmdict_simplified(&db)?;
         db.insert("successfully_populated_flag", "")?;
         db.flush()?;
+        crate::plugins::kihon_plugin::dependencies::cleanup_files();
         Ok(db)
     }
 

@@ -89,3 +89,30 @@ pub fn fetch_jmdict_furigana(destination_path: &PathBuf) -> Result<(), Box<dyn E
 
     Ok(())
 }
+
+pub fn cleanup_files() {
+    if let Some(mut data_dir_path) = dirs::data_dir() {
+        data_dir_path = data_dir_path.join("popup_dictionary").join("dicts");
+
+        let leeds_frequency_path = data_dir_path.clone().join("leeds-corpus-frequency.txt");
+        try_remove_file(leeds_frequency_path);
+
+        let jmdict_furigana_path = data_dir_path.clone().join("jmdict-furigana.json");
+        try_remove_file(jmdict_furigana_path);
+
+        let jmdict_simplified_path = data_dir_path.clone().join("jmdict-simplified.json");
+        try_remove_file(jmdict_simplified_path);
+    } else {
+        tracing::warn!(
+            "Could not cleanup files: No valid data path found in environment variables."
+        );
+    }
+}
+
+fn try_remove_file(path: PathBuf) {
+    if let Err(e) = std::fs::remove_file(&path) {
+        tracing::warn!("Could not cleanup {} due to error: {e}", path.display());
+    } else {
+        tracing::info!("Cleaned up {}", path.display());
+    }
+}

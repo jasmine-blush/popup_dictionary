@@ -13,6 +13,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 - **Docs:** A `CHANGELOG.md` for easier tracking of changes.
 - **CLI:** A `--log-file` argument allowing for verbose logging to a file.
+- **Kihon:** Three datasets needed only for initial database generation will now
+  be automatically cleaned up afterwards.
 
 ### Changed
 
@@ -32,7 +34,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
-- **Internal:** Added basic metadata to `Cargo.toml`.
+- **Internal:** Basic metadata to `Cargo.toml`.
 
 ### Changed
 
