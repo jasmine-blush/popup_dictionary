@@ -1,10 +1,12 @@
+#[cfg(feature = "hyprland-support")]
+use hyprland::ctl::plugin;
+
 use eframe::{
     NativeOptions, egui,
     epaint::text::{FontInsert, InsertFontFamily},
 };
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
 use std::sync::{Arc, Mutex};
-use tracing::{error, warn};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
@@ -37,10 +39,14 @@ pub struct Config {
 pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
     let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
+    #[cfg(feature = "hyprland-support")]
+    tracing::debug!("Looks like Hyprland? {}.", is_hyprland);
 
     let mut init_pos: Option<Pos2> = None;
     let options: NativeOptions;
     if config.open_at_cursor {
+        tracing::info!("Trying to open window at cursor position.");
+
         match crate::window_helper::get_optimal_init_pos(
             #[cfg(feature = "hyprland-support")]
             is_hyprland,
@@ -49,6 +55,12 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
         ) {
             Ok(optimal_pos) => {
                 init_pos = Some(optimal_pos);
+
+                tracing::debug!(
+                    "Found optimal window position at x: {}, y: {}.",
+                    optimal_pos.x,
+                    optimal_pos.y
+                );
 
                 options = NativeOptions {
                     viewport: egui::ViewportBuilder::default()
@@ -64,7 +76,8 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                 };
             }
             Err(e) => {
-                warn!("Failed to get optimal init pos with error: {:?}", e);
+                tracing::warn!("Could not get optimal window position due to error: {e}");
+
                 options = NativeOptions {
                     viewport: egui::ViewportBuilder::default()
                         .with_inner_size([
@@ -89,6 +102,17 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
         };
     }
 
+    tracing::debug!(
+        "Window config is width: {}, height: {}, name: {}, plugin: {}, wrapped: {}.",
+        config.initial_width,
+        config.initial_height,
+        APP_NAME,
+        config
+            .initial_plugin
+            .to_owned()
+            .unwrap_or(String::from("None")),
+        config.wrapped
+    );
     eframe::run_native(
         APP_NAME,
         options,
@@ -136,7 +160,7 @@ impl MyApp {
         Self::load_main_font(&cc.egui_ctx);
 
         let available_plugins: Vec<Plugins> = Plugins::all();
-        println!("plugin: {:?}", config.initial_plugin);
+
         let init_plugin_idx: usize = if let Some(init_plugin) = &config.initial_plugin {
             available_plugins
                 .iter()
@@ -145,7 +169,6 @@ impl MyApp {
         } else {
             0
         };
-        println!("plugin: {}", init_plugin_idx);
 
         let mut app = Self {
             config,
@@ -163,6 +186,7 @@ impl MyApp {
 
         app.try_load_plugin(init_plugin_idx);
 
+        tracing::info!("Opening the window.");
         app
     }
 
@@ -187,6 +211,14 @@ impl MyApp {
     }
 
     fn try_load_plugin(&mut self, plugin_index: usize) {
+        tracing::info!(
+            "Trying to load plugin: {}",
+            self.available_plugins.get(plugin_index).map_or(
+                format!("{}?", plugin_index),
+                |plugin| format!("{}.", plugin.name())
+            )
+        );
+
         if plugin_index >= self.available_plugins.len() {
             return;
         }
@@ -196,10 +228,12 @@ impl MyApp {
             let mut state = state_clone.lock().unwrap();
             match *state {
                 PluginState::Loading => {
+                    tracing::info!("A plugin is currently loading.");
                     return;
                 }
                 PluginState::Ready(_) => {
                     if self.active_plugin_index == plugin_index {
+                        tracing::info!("The same plugin is already loaded.");
                         return;
                     }
                     *state = PluginState::Loading;
@@ -352,7 +386,9 @@ impl eframe::App for MyApp {
                 if let Err(e) =
                     crate::window_helper::move_window_hyprland(init_pos.x as i16, init_pos.y as i16)
                 {
-                    tracing::error!("{}", e);
+                    tracing::warn!(
+                        "Could not set initial window position on hyprland due to error: {e}"
+                    );
                 } else {
                     self.init_pos = None;
                 }
@@ -362,7 +398,7 @@ impl eframe::App for MyApp {
             if let Err(e) =
                 crate::window_helper::move_window_x11(init_pos.x as i32, init_pos.y as i32)
             {
-                tracing::error!("{}", e);
+                tracing::warn!("Could not set initial window position on x11 due to error: {e}");
             } else {
                 self.init_pos = None;
             }
@@ -547,11 +583,13 @@ impl eframe::App for MyApp {
                                 // Copy button
                                 let sentence: String = self.sentence.to_owned();
                                 std::thread::spawn(|| {
+                                    tracing::debug!("Trying to copy input text to clipboard.");
                                     let mut clipboard: arboard::Clipboard =
                                         arboard::Clipboard::new().unwrap();
                                     clipboard.set_text(sentence).unwrap();
                                     std::thread::sleep(std::time::Duration::from_secs(1));
                                     drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
+                                    tracing::debug!("Successfully copied input text to clipboard.");
                                 });
                             }
                             if ui

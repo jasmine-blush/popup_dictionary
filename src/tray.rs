@@ -1,4 +1,6 @@
 pub fn spawn_tray_icon() {
+    tracing::info!("Spawning tray icon.");
+
     #[cfg(target_os = "linux")]
     {
         use ksni::TrayMethods;

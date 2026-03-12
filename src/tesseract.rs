@@ -1,5 +1,6 @@
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
+
 use std::{
     error::Error,
     io::Write,
@@ -21,6 +22,8 @@ pub fn check_tesseract() -> Result<String, Box<dyn Error>> {
             .creation_flags(CREATE_NO_WINDOW)
             .output()
         {
+            tracing::debug!("Could not find Tesseract in PATH, checking default install dir.");
+
             Command::new(TESS_PATH_WINDOWS)
                 .arg("--version")
                 .creation_flags(CREATE_NO_WINDOW)
@@ -34,6 +37,8 @@ pub fn check_tesseract() -> Result<String, Box<dyn Error>> {
 }
 
 pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
+    tracing::debug!("Attempting OCR with Tesseract.");
+
     let tess_command: String = check_tesseract()?;
 
     #[cfg(target_os = "linux")]
@@ -89,6 +94,12 @@ pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()?;
             let hor_conf: f32 = get_conf(hor_conf_command, image_data)?;
+
+            tracing::debug!(
+                "Tesseract horizontal confidence: {}, vertical confidence: {}.",
+                hor_conf,
+                ver_conf
+            );
             if hor_conf >= ver_conf {
                 #[cfg(target_os = "linux")]
                 let hor_command = Command::new(&tess_command)
@@ -144,8 +155,8 @@ pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
             }
         }
         Err(_) => {
-            eprintln!(
-                "Couldn't parse vertical text. Make sure you have jpn_vert.traineddata installed if you want vertical text support."
+            tracing::warn!(
+                "Could not check for vertical text with Tesseract. Make sure you have vertical Japanese language data installed if you want vertical text support."
             );
             #[cfg(target_os = "linux")]
             let hor_command = Command::new(&tess_command)
@@ -180,7 +191,9 @@ fn get_conf(mut child: Child, image_data: &[u8]) -> Result<f32, Box<dyn Error>> 
     }
     let output = child.wait_with_output()?;
     if !output.status.success() {
-        return Err(Box::from("Error when trying to call tesseract."));
+        return Err(Box::from(
+            "Error when trying to call tesseract for confidence.",
+        ));
     }
     let tsv = String::from_utf8_lossy(&output.stdout);
 
@@ -208,7 +221,7 @@ fn get_text(mut child: Child, image_data: &[u8]) -> Result<String, Box<dyn Error
     }
     let output = child.wait_with_output()?;
     if !output.status.success() {
-        return Err(Box::from("Error when trying to call tesseract."));
+        return Err(Box::from("Error when trying to call tesseract for text."));
     }
     let text = String::from_utf8_lossy(&output.stdout).to_string();
     Ok(text)

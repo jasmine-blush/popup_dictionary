@@ -15,6 +15,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **CLI:** A `--log-file` argument allowing for verbose logging to a file.
 - **Kihon:** Three datasets needed only for initial database generation will now
   be automatically cleaned up afterwards.
+- **Core:** More and improved logging throughout the codebase.
 
 ### Changed
 

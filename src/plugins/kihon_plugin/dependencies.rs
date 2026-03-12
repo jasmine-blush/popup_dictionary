@@ -113,6 +113,6 @@ fn try_remove_file(path: PathBuf) {
     if let Err(e) = std::fs::remove_file(&path) {
         tracing::warn!("Could not cleanup {} due to error: {e}", path.display());
     } else {
-        tracing::info!("Cleaned up {}", path.display());
+        tracing::info!("Cleaned up {}.", path.display());
     }
 }

@@ -110,7 +110,8 @@ impl Dictionary {
     }
 
     fn populate_database(db: &Db) -> Result<&Db, Box<dyn Error>> {
-        println!("populating");
+        tracing::info!("Trying to populate database for Kihon plugin.");
+
         Self::parse_jmdict_simplified(&db)?;
         db.insert("successfully_populated_flag", "")?;
         db.flush()?;
@@ -391,7 +392,7 @@ impl Dictionary {
                 if let Some(generic_tag) = Self::JMDICT_GENERIC_MAPPING.get(part) {
                     meaning_tags.push(generic_tag.to_string());
                 } else {
-                    println!("No generic tag found for jmdict tag: {}", part);
+                    tracing::debug!("No generic tag found for jmdict tag: {}", part);
                 }
             }
 

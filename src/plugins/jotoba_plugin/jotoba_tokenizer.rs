@@ -131,6 +131,10 @@ impl JotobaTokenizer {
     }
 
     pub fn tokenize(&mut self, sentence: &str) -> Result<Vec<Token>, Box<dyn Error>> {
+        tracing::info!("Trying to tokenize with Jotoba.");
+        tracing::debug!("Input text for Jotoba tokenization is: {}.", sentence);
+
+        // Firstly splitting the input sentence into valid and invalid sections of text
         let mut sentence_parts = Vec::new(); // (part, is_alphabetic)
         let mut current_part = String::new();
 
@@ -149,10 +153,15 @@ impl JotobaTokenizer {
             sentence_parts.push((current_part, true));
         }
 
+        // Then processing valid sections, adding invalid sections as "invalid" tokens.
         let mut tokenized_sentence: Vec<Token> = Vec::new();
         for (part_slice, is_alphabetic) in sentence_parts {
-            // Non-alphabetic character
+            tracing::trace!("Processing section with Jotoba: {}.", part_slice);
+
+            // Non-alphabetic section
             if !is_alphabetic {
+                tracing::trace!("Section is invalid.");
+
                 tokenized_sentence.push(Token {
                     input_word: part_slice.to_owned(),
                     deinflected_word: part_slice.to_owned(),
@@ -162,14 +171,20 @@ impl JotobaTokenizer {
                 continue;
             }
 
-            // Longer than max suggestion length, have to tokenize
+            tracing::trace!("Section is valid.");
+
+            // Section is longer than maximum allowed Jotoba suggestion API request length, have to use costly manual tokenization
             if part_slice.chars().count() > JOTOBA_SUGGESTION_MAX {
+                tracing::trace!("Tokenizing whole section.");
+
                 let tokens = self.tokenize_sentence(&part_slice)?;
                 tokenized_sentence.extend(tokens);
                 continue;
             }
 
-            // get jotoba suggestions and AhoCorasick left-match, tokenize non-matches
+            tracing::trace!("Getting Jotoba suggestions for section.");
+
+            // Get jotoba suggestions and build AhoCorasick left-match, do manual tokenization on non-matches
             let suggestion_response = self.query_suggestion(&part_slice)?;
             let suggestions = suggestion_response.suggestions;
 
@@ -220,8 +235,10 @@ impl JotobaTokenizer {
                 last_end_byte = end_byte;
             }
 
-            // tokenize non-matches at end of sentence
+            // Do manual tokenization on non-matches at end of sentence
             if last_end_byte < part_slice.len() {
+                tracing::trace!("End of section has non-matches.");
+
                 let unknown_slice = &part_slice[last_end_byte..part_slice.len()];
                 if COMMON_UNKNOWNS.contains_key(unknown_slice) {
                     tokenized_sentence.push(Token {
@@ -240,6 +257,8 @@ impl JotobaTokenizer {
     }
 
     fn tokenize_sentence(&mut self, sentence: &String) -> Result<Vec<Token>, Box<dyn Error>> {
+        tracing::trace!("Doing manual tokenization on section: {}.", sentence);
+
         let mut sentence: String = sentence.to_owned();
 
         let mut token_cache: Vec<CachedToken> = Vec::new();
@@ -305,7 +324,7 @@ impl JotobaTokenizer {
                                 }));
                             }
                         } else {
-                            return Err(Box::from("Input couldn't be parsed properly."));
+                            return Err(Box::from("Could not properly parse section."));
                         }
                     }
                 }
@@ -385,6 +404,8 @@ impl JotobaTokenizer {
     }
 
     fn query_words(&mut self, sentence: &String) -> Result<WordsResponse, Box<dyn Error>> {
+        tracing::trace!("Querying words for section: {}.", sentence);
+
         let easy: &mut Easy = &mut self.easy_client.words_easy;
 
         let mut buf: Vec<u8> = Vec::new();
@@ -413,6 +434,8 @@ impl JotobaTokenizer {
         &mut self,
         sentence: &String,
     ) -> Result<SuggestionResponse, Box<dyn Error>> {
+        tracing::trace!("Querying suggestion for section: {}.", sentence);
+
         let easy: &mut Easy = &mut self.easy_client.suggestion_easy;
 
         let mut buf: Vec<u8> = Vec::new();
@@ -440,6 +463,14 @@ impl JotobaTokenizer {
     }
 
     pub fn get_response(&mut self, token: &Token) -> Result<WordsResponse, Box<dyn Error>> {
+        tracing::trace!(
+            "Retrieving token input: {}, deinflection: {}, conjugations: {}, is_valid: {}.",
+            token.input_word,
+            token.deinflected_word,
+            token.conjugations.len(),
+            token.is_valid()
+        );
+
         let cached_token: Option<&CachedToken> =
             self.token_cache
                 .iter()
@@ -457,11 +488,19 @@ impl JotobaTokenizer {
                         word: token.input_word.to_string(),
                         response: response.clone(),
                     }));
+
+                    tracing::trace!("Found!");
                     Ok(response)
                 } else {
                     self.token_cache
                         .push(CachedToken::Invalid(token.input_word.to_string()));
-                    Err(Box::from("No matching translation(s) found."))
+                    Err(Box::from(format!(
+                        "No matching translation(s) found for token input: {}, deinflection: {}, conjugations: {}, is_valid: {}.",
+                        token.input_word,
+                        token.deinflected_word,
+                        token.conjugations.len(),
+                        token.is_valid()
+                    )))
                 }
             }
         }

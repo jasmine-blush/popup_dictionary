@@ -3,10 +3,6 @@
     windows_subsystem = "windows"
 )]
 
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::Layer;
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Console::AttachConsole;
 
@@ -17,6 +13,9 @@ use std::io::Cursor;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use tracing_subscriber::{
+    EnvFilter, Layer, fmt::format::FmtSpan, layer::SubscriberExt, util::SubscriberInitExt,
+};
 
 mod tray;
 
@@ -143,51 +142,52 @@ fn main() -> ExitCode {
 
         if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running text mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.primary {
             if let Err(e) = popup_dictionary::primary(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running primary mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.secondary {
             if let Err(e) = popup_dictionary::secondary(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running secondary mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running clipboard mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
             if let Err(e) = popup_dictionary::watch(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
                     if let Err(e) = popup_dictionary::ocr(image, config) {
-                        tracing::error!("Error: {e}");
+                        tracing::error!("Failed while running ocr mode due to error: {e}");
                         return ExitCode::FAILURE;
                     }
                 }
                 Err(e) => {
                     tracing::error!(
-                        "Error: OCR mode requires path or image data to be provided.\n{e}"
+                        "Could not find path or image data to run OCR mode with error: {e}"
                     );
                     return ExitCode::FAILURE;
                 }
             }
         } else {
+            tracing::info!("No mode specified. Defaulting to watch mode with tray icon.");
             // Default to watch mode with tray icon if no mode set
             if !config.show_tray_icon {
                 crate::tray::spawn_tray_icon();
             }
             if let Err(e) = popup_dictionary::watch(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -200,41 +200,42 @@ fn main() -> ExitCode {
 
         if let Some(text) = &cli.modes.text {
             if let Err(e) = popup_dictionary::run(&text, config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running text mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.clipboard {
             if let Err(e) = popup_dictionary::clipboard(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running clipboard mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
             if let Err(e) = popup_dictionary::watch(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         } else if let Some(ocr_path) = cli.modes.ocr {
             match get_image_for_ocr(ocr_path) {
                 Ok(image) => {
                     if let Err(e) = popup_dictionary::ocr(image, config) {
-                        tracing::error!("Error: {e}");
+                        tracing::error!("Failed while running ocr mode due to error: {e}");
                         return ExitCode::FAILURE;
                     }
                 }
                 Err(e) => {
                     tracing::error!(
-                        "Error: OCR mode requires path or image data to be provided.\n{e}"
+                        "Could not find path or image data to run OCR mode with error: {e}"
                     );
                     return ExitCode::FAILURE;
                 }
             }
         } else {
+            tracing::info!("No mode specified. Defaulting to watch mode with tray icon.");
             // Default to watch mode with tray icon if no mode set
             if !config.show_tray_icon {
                 crate::tray::spawn_tray_icon();
             }
             if let Err(e) = popup_dictionary::watch(config) {
-                tracing::error!("Error: {e}");
+                tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
         }
@@ -288,7 +289,7 @@ fn init_logging(verbose: bool, log_file: Option<Option<PathBuf>>) {
                 tracing_subscriber::fmt::layer()
                     .with_ansi(false)
                     .with_writer(std::sync::Arc::new(file))
-                    .with_filter(EnvFilter::new("debug")),
+                    .with_filter(EnvFilter::new("trace")),
             ),
             Err(e) => {
                 log_file_error = Some(e);
