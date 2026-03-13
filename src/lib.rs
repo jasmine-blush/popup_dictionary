@@ -227,9 +227,12 @@ fn clipboard_content_differs(first: &ClipboardContent, second: &ClipboardContent
 pub fn ocr(image: DynamicImage, config: app::Config) -> Result<(), Box<dyn Error>> {
     tracing::info!("Attempting to run OCR mode.");
 
-    if let Err(e) = check_tesseract() {
-        return Err(Box::from(format!("Could not find Tesseract: {e}")));
-    }
+    let tess_command: String = match check_tesseract() {
+        Ok(command) => command,
+        Err(e) => {
+            return Err(Box::from(format!("Could not find Tesseract: {e}")));
+        }
+    };
 
     let mut image_data = Vec::new();
     image.write_to(
@@ -237,7 +240,7 @@ pub fn ocr(image: DynamicImage, config: app::Config) -> Result<(), Box<dyn Error
         image::ImageFormat::Png,
     )?;
 
-    let sentence = ocr_image(&image_data)?;
+    let sentence = ocr_image(&tess_command, &image_data)?;
 
     run(&sentence, config)
 

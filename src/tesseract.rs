@@ -36,10 +36,8 @@ pub fn check_tesseract() -> Result<String, Box<dyn Error>> {
     return Ok(String::from("tesseract"));
 }
 
-pub fn ocr_image(image_data: &[u8]) -> Result<String, Box<dyn Error>> {
+pub fn ocr_image(tess_command: &str, image_data: &[u8]) -> Result<String, Box<dyn Error>> {
     tracing::debug!("Attempting OCR with Tesseract.");
-
-    let tess_command: String = check_tesseract()?;
 
     #[cfg(target_os = "linux")]
     let ver_conf_command = Command::new(&tess_command)
