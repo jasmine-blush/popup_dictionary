@@ -18,6 +18,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Core:** More and improved logging throughout the codebase.
 - **Core:** A custom font loading mechanism that checks for supported fonts on
   the system, if none are found a default font is downloaded.
+- **CLI:** A `--font` argument for specifying a system font to be used.
 
 ### Changed
 

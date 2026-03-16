@@ -34,6 +34,7 @@ pub struct Config {
     pub initial_width: u16,
     pub initial_height: u16,
     pub show_tray_icon: bool,
+    pub font: String,
 }
 
 pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
@@ -157,7 +158,7 @@ impl MyApp {
         #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
     ) -> Self {
-        crate::font_helper::load_main_font(&cc.egui_ctx);
+        crate::font_helper::load_main_font(&cc.egui_ctx, &config.font);
 
         let available_plugins: Vec<Plugins> = Plugins::all();
 

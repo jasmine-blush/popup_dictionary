@@ -94,13 +94,17 @@ struct Options {
 
     #[cfg(target_os = "linux")]
     /// Enable logging to a file. A path to a file or directory can optionally be provided. Default: ~/.local/share/popup_dictionary/log.txt
-    #[arg(long = "log-file", help_heading = None)]
+    #[arg(long = "log-file", value_name = "PATH", help_heading = None)]
     log_file: Option<Option<PathBuf>>,
 
     #[cfg(target_os = "windows")]
     /// Enable logging to a file. A path to a folder or file can optionally be provided. Default: %APPDATA%\popup_dictionary\log.txt
-    #[arg(long = "log-file", help_heading = None)]
+    #[arg(long = "log-file", value_name = "PATH", help_heading = None)]
     log_file: Option<Option<PathBuf>>,
+
+    #[arg(long = "font", help_heading = None)]
+    /// Specify the name of a font installed on your system to be used for the UI. Default: Noto Sans CJK JP
+    font: Option<String>,
 }
 
 const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
@@ -132,6 +136,7 @@ fn main() -> ExitCode {
         initial_width: cli.options.initial_width.unwrap_or(450),
         initial_height: cli.options.initial_height.unwrap_or(450),
         show_tray_icon: cli.options.show_tray_icon,
+        font: cli.options.font.unwrap_or(String::from("Noto Sans CJK JP")),
     };
 
     #[cfg(target_os = "linux")]
