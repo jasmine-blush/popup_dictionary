@@ -21,6 +21,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **CLI:** A `--font` argument for specifying a system font to be used.
 - **UI:** A pause/resume button to the tray menu to pause detection in watch mode.
 - **UI:** Helpful tooltips when hovering over buttons.
+- **Kihon:** A copy button to each definition term.
 
 ### Changed
 

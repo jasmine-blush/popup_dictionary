@@ -220,19 +220,51 @@ impl KihonPlugin {
 
     fn display_terms(ui: &mut Ui, terms: &Vec<DictionaryTerm>) {
         for dictionary_term in terms {
-            if !dictionary_term.term.is_empty() {
-                if let Some(furigana_vec) = &dictionary_term.furigana {
-                    Self::display_furigana(ui, furigana_vec);
+            ui.horizontal(|ui| {
+                if !dictionary_term.term.is_empty() {
+                    if let Some(furigana_vec) = &dictionary_term.furigana {
+                        Self::display_furigana(ui, furigana_vec);
+                    } else {
+                        let furigana: Vec<Furigana> = vec![Furigana {
+                            ruby: dictionary_term.term.to_string(),
+                            rt: Some(dictionary_term.reading.to_string()),
+                        }];
+                        Self::display_furigana(ui, &furigana);
+                    }
                 } else {
-                    let furigana: Vec<Furigana> = vec![Furigana {
-                        ruby: dictionary_term.term.to_string(),
-                        rt: Some(dictionary_term.reading.to_string()),
-                    }];
-                    Self::display_furigana(ui, &furigana);
+                    ui.label(RichText::new(&dictionary_term.reading).heading());
                 }
-            } else {
-                ui.label(RichText::new(&dictionary_term.reading).heading());
-            }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(app::SPACING_SIZE);
+
+                    if ui
+                        .add(egui::Button::new(
+                            RichText::new("\u{1f4cb}").size(app::TINY_TEXT_SIZE),
+                        ))
+                        .on_hover_text(
+                            RichText::new("Copy term to clipboard").size(app::TINY_TEXT_SIZE),
+                        )
+                        .clicked()
+                    {
+                        // Copy button
+                        let term: String = if !dictionary_term.term.is_empty() {
+                            dictionary_term.term.to_owned()
+                        } else {
+                            dictionary_term.reading.to_owned()
+                        };
+                        std::thread::spawn(|| {
+                            tracing::debug!("Trying to copy term to clipboard.");
+                            let mut clipboard: arboard::Clipboard =
+                                arboard::Clipboard::new().unwrap();
+                            clipboard.set_text(term).unwrap();
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                            drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
+                            tracing::debug!("Successfully copied term to clipboard.");
+                        });
+                    }
+                });
+            });
 
             let mut count: u32 = 0;
             let mut last_tags: String = String::new();
