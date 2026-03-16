@@ -319,7 +319,7 @@ impl KihonPlugin {
         let rect = egui::Rect::from_min_size(ui.cursor().min, text_galley.size() + (2.0 * padding));
         let response = ui
             .allocate_rect(rect, egui::Sense::hover())
-            .on_hover_text(Dictionary::get_tag(tag));
+            .on_hover_text(RichText::new(Dictionary::get_tag(tag)).size(app::TINY_TEXT_SIZE));
 
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Help);

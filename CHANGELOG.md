@@ -20,6 +20,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   the system, if none are found a default font is downloaded.
 - **CLI:** A `--font` argument for specifying a system font to be used.
 - **UI:** A pause/resume button to the tray menu to pause detection in watch mode.
+- **UI:** Helpful tooltips when hovering over buttons.
 
 ### Changed
 
