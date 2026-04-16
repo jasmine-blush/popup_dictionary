@@ -23,11 +23,19 @@ pub struct DictionaryTerm {
     pub common: bool,
     pub term: String,
     pub reading: String,
+    pub alt_forms: Vec<AltForm>,
     pub furigana: Option<Vec<Furigana>>,
     pub meanings: Vec<DictionaryMeaning>,
 }
 
-#[derive(bincode::Encode, bincode::Decode, Clone, Debug)]
+#[derive(bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
+pub struct AltForm {
+    pub term: String,
+    pub reading: String,
+    pub furigana: Option<Vec<Furigana>>,
+}
+
+#[derive(bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
 pub struct DictionaryMeaning {
     pub tags: Vec<String>,
     pub info: Vec<String>,
@@ -53,6 +61,7 @@ struct Word {
 struct Kanji {
     common: bool,
     text: String,
+    tags: Vec<String>, //TODO: Handle these. These are tags that only apply to that kanji
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -60,6 +69,7 @@ struct Kanji {
 struct Kana {
     common: bool,
     text: String,
+    tags: Vec<String>, //TODO: Handle these. These are tags that only apply to that kana
     applies_to_kanji: Vec<String>,
 }
 
@@ -88,7 +98,7 @@ struct JMDictFurigana {
     furigana: Vec<Furigana>,
 }
 
-#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode, Clone, Debug)]
+#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
 pub struct Furigana {
     pub ruby: String,
     pub rt: Option<String>,
@@ -192,6 +202,8 @@ impl Dictionary {
 
         let wildcard: String = String::from("*");
         for word in &jmdict.words {
+            let mut entries: Vec<(String, DictionaryTerm)> = Vec::new();
+
             let current_id: String = word.id.to_string();
             if !word.kanji.is_empty() {
                 for kanji in &word.kanji {
@@ -215,33 +227,45 @@ impl Dictionary {
                         if frequency.is_none() {
                             frequency = frequency_map.get(&kana.text);
                         }
-                        Self::insert_entry(
-                            db,
-                            &format!("term:{}", kanji.text),
-                            &current_id,
-                            &frequency,
-                            &kanji.common,
-                            &kanji.text,
-                            &kana.text,
-                            &furigana_map.get(&format!("{},{}", &kanji.text, &kana.text)),
-                            &meanings,
-                        )?;
+
+                        entries.push((
+                            format!("term:{}", kanji.text),
+                            DictionaryTerm {
+                                id: current_id.clone(),
+                                frequency: frequency.clone().map(|f| f.clone()),
+                                common: kanji.common.clone(),
+                                term: kanji.text.clone(),
+                                reading: kana.text.clone(),
+                                alt_forms: Vec::new(),
+                                furigana: furigana_map
+                                    .get(&format!("{},{}", &kanji.text, &kana.text))
+                                    .clone()
+                                    .map(|f| f.clone()),
+                                meanings: meanings.clone(),
+                            },
+                        ));
 
                         let mut frequency = frequency_map.get(&kana.text);
                         if frequency.is_none() {
                             frequency = frequency_map.get(&kanji.text);
                         }
-                        Self::insert_entry(
-                            db,
-                            &format!("reading:{}", kana.text),
-                            &current_id,
-                            &frequency,
-                            &kana.common,
-                            &kanji.text,
-                            &kana.text,
-                            &furigana_map.get(&format!("{},{}", &kanji.text, &kana.text)),
-                            &meanings,
-                        )?;
+
+                        entries.push((
+                            format!("reading:{}", kana.text),
+                            DictionaryTerm {
+                                id: current_id.clone(),
+                                frequency: frequency.clone().map(|f| f.clone()),
+                                common: kana.common.clone(),
+                                term: kanji.text.clone(),
+                                reading: kana.text.clone(),
+                                alt_forms: Vec::new(),
+                                furigana: furigana_map
+                                    .get(&format!("{},{}", &kanji.text, &kana.text))
+                                    .clone()
+                                    .map(|f| f.clone()),
+                                meanings: meanings.clone(),
+                            },
+                        ));
                     }
                 }
 
@@ -262,16 +286,50 @@ impl Dictionary {
                         &jmdict.tags,
                     );
 
+                    entries.push((
+                        format!("reading:{}", kana.text),
+                        DictionaryTerm {
+                            id: current_id.clone(),
+                            frequency: frequency_map.get(&kana.text).clone().map(|f| f.clone()),
+                            common: kana.common.clone(),
+                            term: String::new(),
+                            reading: kana.text.clone(),
+                            alt_forms: Vec::new(),
+                            furigana: None,
+                            meanings: meanings.clone(),
+                        },
+                    ));
+                }
+
+                for (i, (key, entry)) in entries.iter().enumerate() {
+                    let mut alt_forms: Vec<AltForm> = Vec::new();
+                    for (j, (_, comp)) in entries.iter().enumerate() {
+                        //TODO: also check kanji and kana tags
+                        if i != j && entry.meanings == comp.meanings {
+                            if entry.term != comp.term || entry.reading != comp.reading {
+                                let alt_form: AltForm = AltForm {
+                                    term: comp.term.clone(),
+                                    reading: comp.reading.clone(),
+                                    furigana: comp.furigana.clone(),
+                                };
+                                if !alt_forms.contains(&alt_form) {
+                                    alt_forms.push(alt_form);
+                                }
+                            }
+                        }
+                    }
+
                     Self::insert_entry(
                         db,
-                        &format!("reading:{}", kana.text),
+                        key,
                         &current_id,
-                        &frequency_map.get(&kana.text),
-                        &kana.common,
-                        "",
-                        &kana.text,
-                        &None,
-                        &meanings,
+                        &entry.frequency.as_ref(),
+                        &entry.common,
+                        &entry.term,
+                        &entry.reading,
+                        &alt_forms,
+                        &entry.furigana.as_ref(),
+                        &entry.meanings,
                     )?;
                 }
             } else {
@@ -288,16 +346,44 @@ impl Dictionary {
                         &jmdict.tags,
                     );
 
+                    entries.push((
+                        format!("reading:{}", kana.text),
+                        DictionaryTerm {
+                            id: current_id.clone(),
+                            frequency: frequency_map.get(&kana.text).clone().map(|f| f.clone()),
+                            common: kana.common.clone(),
+                            term: String::new(),
+                            reading: kana.text.clone(),
+                            alt_forms: Vec::new(),
+                            furigana: None,
+                            meanings: meanings.clone(),
+                        },
+                    ));
+                }
+
+                for (i, (key, entry)) in entries.iter().enumerate() {
+                    let mut alt_forms: Vec<AltForm> = Vec::new();
+                    for (j, (_, comp)) in entries.iter().enumerate() {
+                        //TODO: also check kana tags
+                        if i != j && entry.meanings == comp.meanings {
+                            alt_forms.push(AltForm {
+                                term: comp.term.clone(),
+                                reading: comp.reading.clone(),
+                                furigana: comp.furigana.clone(),
+                            });
+                        }
+                    }
                     Self::insert_entry(
                         db,
-                        &format!("reading:{}", kana.text),
+                        key,
                         &current_id,
-                        &frequency_map.get(&kana.text),
-                        &kana.common,
-                        "",
-                        &kana.text,
-                        &None,
-                        &meanings,
+                        &entry.frequency.as_ref(),
+                        &entry.common,
+                        &entry.term,
+                        &entry.reading,
+                        &alt_forms,
+                        &entry.furigana.as_ref(),
+                        &entry.meanings,
                     )?;
                 }
             }
@@ -430,6 +516,7 @@ impl Dictionary {
         common: &bool,
         term: &str,
         reading: &str,
+        alt_forms: &Vec<AltForm>,
         furigana: &Option<&Vec<Furigana>>,
         meanings: &Vec<DictionaryMeaning>,
     ) -> Result<(), Box<dyn Error>> {
@@ -447,6 +534,7 @@ impl Dictionary {
             common: *common,
             term: term.to_string(),
             reading: reading.to_string(),
+            alt_forms: alt_forms.clone(),
             furigana,
             meanings: meanings.to_vec(),
         };
