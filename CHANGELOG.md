@@ -19,6 +19,9 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Jotoba:** Started aligning the way definitions are presented in the Jotoba
   plugin with the Kihon plugin to lay the groundwork for future unification of
   definition display.
+- **Kihon:** Different forms (kanji/reading) of a word that hold the same
+  meaning are not displayed separately anymore. Instead, the primary term
+  will now show its "Other forms" in the definition.
 
 ### Deprecated
 

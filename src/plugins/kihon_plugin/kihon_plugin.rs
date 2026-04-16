@@ -9,6 +9,7 @@ use crate::app::MyApp;
 use crate::app::SPACING_SIZE;
 use crate::plugin::Plugin;
 use crate::plugin::Token;
+use crate::plugins::kihon_plugin::jmdict_dictionary::AltForm;
 use crate::plugins::kihon_plugin::jmdict_dictionary::{
     Dictionary, DictionaryEntry, DictionaryTerm, Furigana,
 };
@@ -219,17 +220,28 @@ impl KihonPlugin {
     }
 
     fn display_terms(ui: &mut Ui, terms: &Vec<DictionaryTerm>) {
-        for dictionary_term in terms {
+        let mut displayed_alt_forms: Vec<AltForm> = Vec::new(); // adding AltForms in here as they get
+        // displayed, checking every term for whether it was already displayed as an alt form in
+        // the past, if yes skip it.
+        for (id, dictionary_term) in terms.iter().enumerate() {
+            let curr_form: AltForm = AltForm {
+                term: dictionary_term.term.clone(),
+                reading: dictionary_term.reading.clone(),
+                furigana: dictionary_term.furigana.clone(),
+            };
+            if displayed_alt_forms.contains(&curr_form) {
+                continue;
+            }
             ui.horizontal(|ui| {
                 if !dictionary_term.term.is_empty() {
                     if let Some(furigana_vec) = &dictionary_term.furigana {
-                        Self::display_furigana(ui, furigana_vec);
+                        Self::display_furigana(ui, furigana_vec, 1.0);
                     } else {
                         let furigana: Vec<Furigana> = vec![Furigana {
                             ruby: dictionary_term.term.to_string(),
                             rt: Some(dictionary_term.reading.to_string()),
                         }];
-                        Self::display_furigana(ui, &furigana);
+                        Self::display_furigana(ui, &furigana, 1.0);
                     }
                 } else {
                     ui.label(RichText::new(&dictionary_term.reading).heading());
@@ -311,6 +323,76 @@ impl KihonPlugin {
                 count += 1;
             }
 
+            if !dictionary_term.alt_forms.is_empty() {
+                ui.add_space(app::SPACING_SIZE * 0.5);
+
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(app::SPACING_SIZE);
+                        ui.label(
+                            RichText::new("Other forms")
+                                .size(app::TINY_TEXT_SIZE * 0.8)
+                                .color(app::PRIMARY_TEXT_COLOR),
+                        );
+                    });
+                });
+
+                let scroll_id = ui.id().with(format!("alt_forms_{}", id));
+                let stored_width: f32 = ui
+                    .memory(|m| m.data.get_temp(scroll_id))
+                    .unwrap_or(ui.available_width());
+                egui::ScrollArea::horizontal()
+                    .stick_to_right(true)
+                    .id_salt(scroll_id)
+                    .show(ui, |ui| {
+                        let total_width = stored_width.max(ui.available_width());
+
+                        let res = ui.allocate_ui_with_layout(
+                            egui::vec2(total_width, 0.0),
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                ui.set_min_width(ui.available_width());
+                                ui.add_space(app::SPACING_SIZE);
+
+                                let mut form_text: Vec<String> = Vec::new();
+                                for (i, form) in dictionary_term.alt_forms.iter().rev().enumerate()
+                                {
+                                    displayed_alt_forms.push(form.clone());
+                                    if let Some(furigana) = &form.furigana {
+                                        Self::display_furigana(ui, furigana, 0.8);
+                                    } else {
+                                        if form.term.is_empty() {
+                                            ui.label(
+                                                RichText::new(&form.reading)
+                                                    .size(app::BIG_TEXT_SIZE * 0.8)
+                                                    .color(app::PRIMARY_TEXT_COLOR),
+                                            );
+                                        } else {
+                                            let mut furigana_vec: Vec<Furigana> = Vec::new();
+                                            furigana_vec.push(Furigana {
+                                                ruby: form.term.clone(),
+                                                rt: Some(form.reading.clone()),
+                                            });
+
+                                            Self::display_furigana(ui, &furigana_vec, 0.8);
+                                        }
+                                    }
+                                    if i != dictionary_term.alt_forms.len() - 1 {
+                                        ui.label(
+                                            RichText::new("・")
+                                                .size(app::TINY_TEXT_SIZE * 0.8)
+                                                .color(app::PRIMARY_TEXT_COLOR),
+                                        );
+                                    }
+                                }
+                            },
+                        );
+
+                        let measured = res.response.rect.width();
+                        ui.memory_mut(|m| m.data.insert_temp(scroll_id, measured));
+                    });
+            }
+
             ui.add_space(app::SPACING_SIZE * 0.5);
 
             let percent: f32 = 0.8;
@@ -372,7 +454,7 @@ impl KihonPlugin {
         //ui.allocate_space(rect.size());
     }
 
-    fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<Furigana>) {
+    fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<Furigana>, font_scale: f32) {
         let vertical_gap: f32 = 1.0;
 
         // calculate how wide (and tall) the entire string will be
@@ -384,7 +466,7 @@ impl KihonPlugin {
             let main_galley = ui.fonts_mut(|f| {
                 f.layout_no_wrap(
                     furigana.ruby.to_string(),
-                    egui::FontId::proportional(app::BIG_TEXT_SIZE),
+                    egui::FontId::proportional(app::BIG_TEXT_SIZE * font_scale),
                     app::PRIMARY_TEXT_COLOR,
                 )
             });
@@ -393,7 +475,7 @@ impl KihonPlugin {
                 ui.fonts_mut(|f| {
                     f.layout_no_wrap(
                         reading.to_string(),
-                        egui::FontId::proportional(app::TINY_TEXT_SIZE),
+                        egui::FontId::proportional(app::TINY_TEXT_SIZE * font_scale),
                         app::LIGHT_TEXT_COLOR,
                     )
                 })
@@ -401,7 +483,7 @@ impl KihonPlugin {
                 ui.fonts_mut(|f| {
                     f.layout_no_wrap(
                         "あ".to_string(), // invisible placeholder
-                        egui::FontId::proportional(app::TINY_TEXT_SIZE),
+                        egui::FontId::proportional(app::TINY_TEXT_SIZE * font_scale),
                         Color32::TRANSPARENT,
                     )
                 })
@@ -433,7 +515,7 @@ impl KihonPlugin {
 
             let main_pos = egui::Pos2::new(
                 current_x + (char_width - main_galley.size().x) * 0.5,
-                rect.top() + app::TINY_TEXT_SIZE + vertical_gap,
+                rect.top() + (app::TINY_TEXT_SIZE * font_scale) + vertical_gap,
             );
             ui.painter()
                 .galley(main_pos, main_galley, Color32::PLACEHOLDER);
