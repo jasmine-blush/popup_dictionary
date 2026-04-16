@@ -46,7 +46,6 @@
         ];
         dependencyPrograms = with pkgs; [
           tesseract
-          xdg-utils
         ];
         buildtimeInputs = with pkgs; [
             fenix-pkgs.rust-analyzer
@@ -82,6 +81,8 @@
             strictDeps = true;
           };
 
+          # ORT_DYLIB_PATH is necessary for Onnx Runtime. It puts the responsibility of providing the shared library on Nix instead of on ORT's downloader.
+          # https://blog.stark.pub/posts/bundling-onnxruntime-rust-nix/
           default = pkgs.runCommandLocal "popup_dictionary" {
             nativeBuildInputs = [
               pkgs.makeWrapper
@@ -92,9 +93,8 @@
             ln -s ${unwrapped}/bin/popup_dictionary $out/bin
             wrapProgram $out/bin/popup_dictionary \
               --set LD_LIBRARY_PATH ${lib.makeLibraryPath runtimeInputs} \
-              --prefix PATH : ${lib.makeBinPath dependencyPrograms} \
-              --set ORT_DYLIB_PATH ${pkgs.onnxruntime}/lib/libonnxruntime.so \
-              --set-default BROWSER firefox
+              --set PATH ${lib.makeBinPath dependencyPrograms} \
+              --set ORT_DYLIB_PATH ${pkgs.onnxruntime}/lib/libonnxruntime.so
           '';
         };
 

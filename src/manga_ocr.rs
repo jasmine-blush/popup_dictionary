@@ -1,6 +1,8 @@
 use image::{DynamicImage, GenericImageView, ImageBuffer, imageops::FilterType};
 use ndarray::s;
 use ort::{inputs, session::Session, value::TensorRef};
+#[cfg(feature = "flake-build")]
+use std::env;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -11,7 +13,23 @@ pub struct MangaOcr {
 }
 
 impl MangaOcr {
+    #[cfg(feature = "flake-build")]
+    fn ort_lib_dir() -> PathBuf {
+        if let Ok(p) = env::var("ORT_DYLIB_PATH") {
+            return PathBuf::from(p);
+        }
+
+        // fallback: ./lib next to binary
+        let exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
+        exe.parent()
+            .map(|p| p.join("lib"))
+            .unwrap_or_else(|| PathBuf::from("./lib"))
+    }
+
     pub fn new() -> Result<Self, Box<dyn Error>> {
+        #[cfg(feature = "flake-build")]
+        ort::init_from(Self::ort_lib_dir())?.commit();
+
         // Encoder
         let encoder_model_handle = std::thread::spawn(|| {
             tracing::debug!("Checking for Encoder model.");
