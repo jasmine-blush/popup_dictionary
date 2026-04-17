@@ -358,7 +358,6 @@ impl KihonPlugin {
                                 ui.set_min_width(ui.available_width());
                                 ui.add_space(app::SPACING_SIZE);
 
-                                let mut form_text: Vec<String> = Vec::new();
                                 for (i, form) in dictionary_term.alt_forms.iter().rev().enumerate()
                                 {
                                     displayed_alt_forms.push(form.clone());
