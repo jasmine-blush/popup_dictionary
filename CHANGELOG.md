@@ -29,6 +29,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Fixed
 
+- **Kihon:** Some alignment text being selectable that is meant to be invisible.
+
 ### Security
 
 ---

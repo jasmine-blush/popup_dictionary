@@ -1,4 +1,5 @@
 use egui::Color32;
+use egui::Label;
 use egui::RichText;
 use egui::Ui;
 use std::error::Error;
@@ -305,10 +306,13 @@ impl KihonPlugin {
                 });
                 if meaning.info.len() > 0 {
                     ui.horizontal_top(|ui| {
-                        ui.label(
-                            RichText::new(format!("{}.", count))
-                                .small()
-                                .color(Color32::TRANSPARENT),
+                        ui.add(
+                            Label::new(
+                                RichText::new(format!("{}.", count))
+                                    .small()
+                                    .color(Color32::TRANSPARENT),
+                            )
+                            .selectable(false),
                         );
                         ui.horizontal_wrapped(|ui| {
                             ui.label(
