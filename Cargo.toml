@@ -25,12 +25,14 @@ aho-corasick = "1.1.4"
 vibrato = "0.5.2"
 sled = "0.34.7"
 bincode = "2.0.1"
-# kihon dataset downloading
+# dependency downloading
 reqwest = { version = "0.13.1", features = ["blocking"] }
 xz2 = { version = "0.1.7", features = ["static"] }
 tar = "0.4.44"
 zstd = "0.13.3"
 flate2 = "1.1.9"
+sha2 = "0.11.0"
+hex = "0.4.3"
 # manga-ocr
 ort = "2.0.0-rc.12"
 ndarray = "0.17.2"

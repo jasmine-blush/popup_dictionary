@@ -13,6 +13,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 - **Jotoba:** Furigana, tags and extra information to definitions.
 - **Core:** A Nix flake including a dev environment by @IamTheCarl in https://github.com/jasmine-blush/popup_dictionary/pull/1.
+- **Core:** File integrity verification using SHA256 after dependency download
+  (currently Kihon and MangaOCR).
 
 ### Changed
 
@@ -22,6 +24,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Kihon:** Different forms (kanji/reading) of a word that hold the same
   meaning are not displayed separately anymore. Instead, the primary term
   will now show its "Other forms" in the definition.
+- **Internal:** Pinned MangaOCR dependencies to a specific version to avoid
+  potential unwanted updates.
 
 ### Deprecated
 
@@ -30,6 +34,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 ### Fixed
 
 - **Kihon:** Some alignment text being selectable that is meant to be invisible.
+- **Internal:** The download URL for the Leeds Frequency Corpus which downloaded
+  a whole webpage instead of a text file until now.
 
 ### Security
 
