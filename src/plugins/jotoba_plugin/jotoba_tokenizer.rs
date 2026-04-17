@@ -81,6 +81,8 @@ pub struct Sense {
     pub glosses: Vec<String>,
     pub pos: Vec<PartOfSpeech>,
     pub information: Option<String>,
+    pub misc: Option<String>,
+    pub xref: Option<String>, // "See also:"
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

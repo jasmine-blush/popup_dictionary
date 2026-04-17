@@ -1,5 +1,6 @@
 use egui::Color32;
 use egui::Context;
+use egui::Label;
 use egui::RichText;
 use egui::Ui;
 use egui::containers::Frame;
@@ -120,16 +121,51 @@ impl Plugin for JotobaPlugin {
                                     RichText::new(format!("{}", sense.glosses.join(", "))).small(),
                                 );
                             });
-                            if let Some(info) = &sense.information {
+
+                            let mut info: Vec<String> = Vec::new();
+                            if let Some(misc) = &sense.misc {
+                                // Turn from CamelCase into regular sentence
+                                let mut misc_readable = String::new();
+                                for c in misc.chars() {
+                                    if misc_readable.is_empty() {
+                                        misc_readable.push(c);
+                                    } else {
+                                        if c.is_uppercase() {
+                                            misc_readable.push(' ');
+                                            misc_readable
+                                                .push_str(&c.to_lowercase().collect::<String>());
+                                        } else {
+                                            misc_readable.push(c);
+                                        }
+                                    }
+                                }
+                                info.push(misc_readable);
+                            }
+                            if let Some(information) = &sense.information {
+                                info.push(information.clone());
+                            }
+                            if let Some(xref) = &sense.xref {
+                                // xref sometimes looks like "お手・おて・１"; no idea why. Just
+                                // take the first element:
+                                if let Some(first) = xref.split("・").nth(0) {
+                                    info.push(format!("see also: {}", first));
+                                }
+                            }
+
+                            if !info.is_empty() {
+                                let info_string: String = info.join(", ");
                                 ui.horizontal_top(|ui| {
-                                    ui.label(
-                                        RichText::new(format!("{}.", count))
-                                            .small()
-                                            .color(Color32::TRANSPARENT),
+                                    ui.add(
+                                        Label::new(
+                                            RichText::new(format!("{}.", count))
+                                                .small()
+                                                .color(Color32::TRANSPARENT),
+                                        )
+                                        .selectable(false),
                                     );
                                     ui.horizontal_wrapped(|ui| {
                                         ui.label(
-                                            RichText::new(format!("{}", info))
+                                            RichText::new(format!("{}", info_string))
                                                 .size(app::TINY_TEXT_SIZE * 0.9)
                                                 .color(app::SECONDARY_TEXT_COLOR),
                                         );

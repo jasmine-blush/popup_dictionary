@@ -11,7 +11,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
-- **Jotoba:** Furigana, tags and extra information to definition terms.
+- **Jotoba:** Furigana, tags and extra information to definitions.
 - **Core:** A Nix flake including a dev environment by @IamTheCarl in https://github.com/jasmine-blush/popup_dictionary/pull/1.
 
 ### Changed
