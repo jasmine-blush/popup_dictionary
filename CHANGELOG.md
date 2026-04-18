@@ -15,6 +15,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Core:** A Nix flake including a dev environment by @IamTheCarl in https://github.com/jasmine-blush/popup_dictionary/pull/1.
 - **Core:** File integrity verification using SHA256 after dependency download
   (currently Kihon and MangaOCR).
+- **Kihon:** A version flag into the Kihon database. It will now automatically
+  regenerate when a newer database version is required.
 
 ### Changed
 

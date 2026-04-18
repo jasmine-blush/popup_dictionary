@@ -105,17 +105,20 @@ pub struct Furigana {
 }
 // ---
 
+const DB_VERSION_FLAG: &str = "db_version_001";
+
 impl Dictionary {
     pub fn load_dictionary(path: &PathBuf) -> Result<Self, Box<dyn Error>> {
         let db: Db = sled::open(path)?;
-        if !db.was_recovered() {
-            Self::populate_database(&db)?;
-        } else {
-            if !db.contains_key("successfully_populated_flag")? {
-                db.clear()?;
-                Self::populate_database(&db)?;
+
+        if db.was_recovered() {
+            if db.contains_key(DB_VERSION_FLAG)? {
+                return Ok(Self { db });
             }
+            db.clear()?;
         }
+
+        Self::populate_database(&db)?;
         Ok(Self { db })
     }
 
@@ -123,7 +126,7 @@ impl Dictionary {
         tracing::info!("Trying to populate database for Kihon plugin.");
 
         Self::parse_jmdict_simplified(&db)?;
-        db.insert("successfully_populated_flag", "")?;
+        db.insert(DB_VERSION_FLAG, "")?;
         db.flush()?;
         crate::plugins::kihon_plugin::dependencies::cleanup_files();
         Ok(db)
