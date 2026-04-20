@@ -89,14 +89,7 @@ pub struct Sense {
 #[serde(untagged)]
 pub enum PartOfSpeech {
     Simple(String),
-    Complex(HashMap<String, SpeechType>),
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-#[serde(untagged)]
-pub enum SpeechType {
-    Simple(String),
-    Complex(HashMap<String, String>),
+    Complex(HashMap<String, PartOfSpeech>),
 }
 
 #[derive(Serialize, Clone, Debug)]

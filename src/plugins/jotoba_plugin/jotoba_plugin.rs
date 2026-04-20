@@ -14,7 +14,6 @@ use crate::plugin::Token;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::Furigana;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::JotobaTokenizer;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::PartOfSpeech;
-use crate::plugins::jotoba_plugin::jotoba_tokenizer::SpeechType;
 
 pub struct JotobaPlugin {
     tokens: Vec<Token>,
@@ -241,24 +240,53 @@ impl JotobaPlugin {
 
     fn display_tags(ui: &mut Ui, tags: &Vec<PartOfSpeech>) {
         ui.horizontal_wrapped(|ui| {
+            //TODO: holy... process tags elsewhere, map to some kind of enum or something.
             for tag in tags {
                 match tag {
                     PartOfSpeech::Simple(tag) => {
                         Self::display_tag(ui, tag, tag);
                     }
                     PartOfSpeech::Complex(tags) => {
-                        for (tag, speechtype) in tags.iter() {
-                            match speechtype {
-                                SpeechType::Simple(hint) => {
+                        for (tag, pos) in tags.iter() {
+                            match pos {
+                                PartOfSpeech::Simple(hint) => {
                                     Self::display_tag(ui, tag, hint);
                                 }
-                                SpeechType::Complex(hints) => {
+                                PartOfSpeech::Complex(hints) => {
                                     for (hint, subhint) in hints {
-                                        Self::display_tag(
-                                            ui,
-                                            tag,
-                                            &format!("{} ({})", hint, subhint),
-                                        );
+                                        match subhint {
+                                            PartOfSpeech::Simple(s) => {
+                                                Self::display_tag(
+                                                    ui,
+                                                    tag,
+                                                    &format!("{} ({})", hint, s),
+                                                );
+                                            }
+                                            PartOfSpeech::Complex(c) => {
+                                                if let Some(class) = c.get("class") {
+                                                    match class {
+                                                        PartOfSpeech::Simple(x) => {
+                                                            Self::display_tag(
+                                                                ui,
+                                                                tag,
+                                                                &format!("{} ({})", hint, x),
+                                                            );
+                                                        }
+                                                        PartOfSpeech::Complex(y) => {
+                                                            tracing::warn!(
+                                                                "Unhandled tag for POS: {:?}",
+                                                                tags
+                                                            );
+                                                        }
+                                                    }
+                                                } else {
+                                                    tracing::warn!(
+                                                        "Unhandled tag for POS: {:?}",
+                                                        tags
+                                                    );
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             };
