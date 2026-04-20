@@ -126,6 +126,30 @@ struct ClipboardContent {
     text: Option<String>,
 }
 
+fn decode_clipboard_image(image: arboard::ImageData) -> Option<DynamicImage> {
+    match ImageReader::new(Cursor::new(image.bytes.as_ref())).with_guessed_format() {
+        Ok(reader) => match reader.decode() {
+            Ok(dynamic_image) => {
+                return Some(dynamic_image);
+            }
+            Err(e) => {
+                tracing::debug!("Could not decode image data due to error: {e}");
+            }
+        },
+        Err(e) => {
+            tracing::warn!("Could not read image data due to error: {e}");
+        }
+    }
+
+    tracing::debug!("Trying to parse image data as raw pixel buffer instead.");
+    ImageBuffer::<Rgba<u8>, _>::from_raw(
+        image.width as u32,
+        image.height as u32,
+        image.bytes.into_owned(),
+    )
+    .map(DynamicImage::ImageRgba8)
+}
+
 pub fn watch(
     config: app::Config,
     paused: Arc<AtomicBool>,
@@ -161,42 +185,8 @@ pub fn watch(
             if let Some(image) = current_content.image {
                 tracing::debug!("Found image data in main clipboard.");
 
-                let image_data = image.clone();
-                let mut success: bool = false;
-                match ImageReader::new(Cursor::new(image_data.bytes)).with_guessed_format() {
-                    Ok(data) => match data.decode() {
-                        Ok(dynamic_image) => {
-                            success = true;
-                            if let Err(e) = ocr(
-                                dynamic_image,
-                                config.clone(),
-                                ocr_model.load(Ordering::Relaxed),
-                                &mut manga_ocr,
-                            ) {
-                                tracing::warn!(
-                                    "Failed while running OCR mode in watch mode due to error: {e}"
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            tracing::warn!("Could not decode image data due to error: {e}");
-                        }
-                    },
-                    Err(e) => {
-                        tracing::warn!("Could not read image data due to error: {e}");
-                    }
-                };
-
-                if !success {
-                    tracing::debug!("Trying to parse image data as raw pixel buffer instead.");
-
-                    let image_data = image.clone();
-                    if let Some(buffer) = ImageBuffer::<Rgba<u8>, _>::from_raw(
-                        image_data.width as u32,
-                        image_data.height as u32,
-                        image_data.bytes.into_owned(),
-                    ) {
-                        let dynamic_image = DynamicImage::ImageRgba8(buffer);
+                match decode_clipboard_image(image) {
+                    Some(dynamic_image) => {
                         if let Err(e) = ocr(
                             dynamic_image,
                             config.clone(),
@@ -207,10 +197,9 @@ pub fn watch(
                                 "Failed while running OCR mode in watch mode due to error: {e}"
                             );
                         }
-                    } else {
-                        tracing::debug!(
-                            "Image buffer not big enough for from_raw. This is weird..."
-                        );
+                    }
+                    None => {
+                        tracing::warn!("Could not decode image data in clipboard.");
                     }
                 }
             } else if let Some(sentence) = current_content.text {
@@ -260,14 +249,11 @@ fn clipboard_content_differs(first: &ClipboardContent, second: &ClipboardContent
     }
 }
 
-pub fn ocr(
+fn ocr_to_sentence(
     image: DynamicImage,
-    config: app::Config,
     ocr_model: usize,
     manga_ocr: &mut Option<MangaOcr>,
-) -> Result<(), Box<dyn Error>> {
-    tracing::info!("Attempting to run OCR mode.");
-
+) -> Result<String, Box<dyn Error>> {
     let sentence = if ocr_model == 0 {
         tracing::info!("Using Tesseract.");
 
@@ -311,6 +297,19 @@ pub fn ocr(
         tracing::error!("Invalid OCR engine {} is selected.", ocr_model);
         String::new()
     };
+
+    Ok(sentence)
+}
+
+pub fn ocr(
+    image: DynamicImage,
+    config: app::Config,
+    ocr_model: usize,
+    manga_ocr: &mut Option<MangaOcr>,
+) -> Result<(), Box<dyn Error>> {
+    tracing::info!("Attempting to run OCR mode.");
+
+    let sentence = ocr_to_sentence(image, ocr_model, manga_ocr)?;
 
     run(&sentence, config)
 
