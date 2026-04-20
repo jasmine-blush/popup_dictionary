@@ -11,6 +11,7 @@ use regex::Regex;
 use std::error::Error;
 use std::io::Cursor;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
@@ -28,7 +29,20 @@ mod plugins;
 mod tesseract;
 mod window_helper;
 
-pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
+fn open_app(
+    sentence: &str,
+    config: app::Config,
+    new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
+) -> Result<(), Box<dyn Error>> {
+    let valid_sentence: String = validate_sentence(&sentence)?;
+
+    tracing::info!("Input looks good. Launching dictionary app.");
+    run_app(&valid_sentence, config, new_sentence_mutex)?;
+
+    Ok(())
+}
+
+fn validate_sentence(sentence: &str) -> Result<String, Box<dyn Error>> {
     let sentence: String = sentence.chars().filter(|c| !c.is_whitespace()).collect();
 
     if sentence.is_empty() {
@@ -39,10 +53,7 @@ pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
         return Err(Box::from("Input text must contain japanese text."));
     }
 
-    tracing::info!("Input looks good. Launching dictionary app.");
-    run_app(&sentence, config)?;
-
-    Ok(())
+    return Ok(sentence);
 }
 
 fn contains_japanese(text: &str) -> bool {
@@ -60,6 +71,12 @@ fn contains_japanese(text: &str) -> bool {
     });
 
     re.is_match(text)
+}
+
+pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
+    open_app(&sentence, config, None)?;
+
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -154,66 +171,199 @@ pub fn watch(
     config: app::Config,
     paused: Arc<AtomicBool>,
     ocr_model: Arc<AtomicUsize>,
+    keep_open: bool,
 ) -> Result<(), Box<dyn Error>> {
     tracing::info!("Attempting to run watch mode.");
 
-    let mut clipboard: Clipboard = Clipboard::new()?;
-    let mut initial_content: ClipboardContent = get_clipboard_content(&mut clipboard);
+    if keep_open {
+        tracing::info!("Keep-open mode enabled. Launching clipboard watcher in background.");
 
-    let mut manga_ocr: Option<MangaOcr> = None;
+        let new_sentence_channel: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let channel_for_thread = Arc::clone(&new_sentence_channel);
 
-    tracing::info!("Watching...");
-    let mut was_paused = false;
-    loop {
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        let (first_sender, first_receiver) = std::sync::mpsc::channel::<String>();
 
-        if paused.load(Ordering::Relaxed) {
-            was_paused = true;
-            continue;
-        }
-        if was_paused {
-            // Replace initial_content with current here to prevent acting on clipboard content
-            // that was copied while paused.
-            initial_content = get_clipboard_content(&mut clipboard);
-            was_paused = false;
-        }
+        let app_is_running = Arc::new(AtomicBool::new(false));
+        let app_is_running_clone = Arc::clone(&app_is_running);
 
-        let current_content: ClipboardContent = get_clipboard_content(&mut clipboard);
-        if clipboard_content_differs(&initial_content, &current_content) {
-            tracing::info!("New clipboard content detected.");
+        let paused_clone = Arc::clone(&paused);
+        let ocr_model_clone = Arc::clone(&ocr_model);
 
-            if let Some(image) = current_content.image {
-                tracing::debug!("Found image data in main clipboard.");
+        std::thread::spawn(move || {
+            let mut clipboard: Clipboard = match Clipboard::new() {
+                Ok(clip) => clip,
+                Err(e) => {
+                    tracing::error!("Could not create clipboard due to error: {e}.");
+                    return;
+                }
+            };
+            let mut initial_content: ClipboardContent = get_clipboard_content(&mut clipboard);
 
-                match decode_clipboard_image(image) {
-                    Some(dynamic_image) => {
-                        if let Err(e) = ocr(
-                            dynamic_image,
-                            config.clone(),
-                            ocr_model.load(Ordering::Relaxed),
-                            &mut manga_ocr,
-                        ) {
-                            tracing::warn!(
-                                "Failed while running OCR mode in watch mode due to error: {e}"
-                            );
+            let mut manga_ocr: Option<MangaOcr> = None;
+
+            tracing::info!("Watching...");
+            let mut was_paused = false;
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+
+                if paused_clone.load(Ordering::Relaxed) {
+                    was_paused = true;
+                    continue;
+                }
+                if was_paused {
+                    // Replace initial_content with current here to prevent acting on clipboard content
+                    // that was copied while paused.
+                    initial_content = get_clipboard_content(&mut clipboard);
+                    was_paused = false;
+                }
+
+                let current_content: ClipboardContent = get_clipboard_content(&mut clipboard);
+                if !clipboard_content_differs(&initial_content, &current_content) {
+                    continue;
+                }
+
+                tracing::info!("New clipboard content detected.");
+
+                let maybe_sentence: Option<String> = if let Some(image) = current_content.image {
+                    tracing::debug!("Found image data in main clipboard.");
+
+                    let ocr_idx = ocr_model_clone.load(Ordering::Relaxed);
+                    match decode_clipboard_image(image) {
+                        Some(dynamic_image) => {
+                            match ocr_to_sentence(dynamic_image, ocr_idx, &mut manga_ocr) {
+                                Ok(sentence) => Some(sentence),
+                                Err(e) => {
+                                    tracing::warn!("OCR failed with error: {e}.");
+                                    None
+                                }
+                            }
+                        }
+                        None => {
+                            tracing::warn!("Could not decode image data in clipboard.");
+                            None
                         }
                     }
-                    None => {
-                        tracing::warn!("Could not decode image data in clipboard.");
+                } else if let Some(sentence) = current_content.text {
+                    tracing::debug!("Found text in main clipboard.");
+
+                    Some(sentence)
+                } else {
+                    None
+                };
+
+                if let Some(sentence) = maybe_sentence {
+                    if !app_is_running_clone.load(Ordering::SeqCst) {
+                        if first_sender.send(sentence).is_err() {
+                            tracing::info!("Could not send sentence to main thread.");
+                            return;
+                        }
+                    } else {
+                        match validate_sentence(&sentence) {
+                            Ok(valid_sentence) => {
+                                *channel_for_thread.lock().unwrap() = Some(valid_sentence);
+                            }
+                            Err(e) => {
+                                tracing::warn!("Not updating sentence due to error: {e}");
+                            }
+                        };
                     }
                 }
-            } else if let Some(sentence) = current_content.text {
-                tracing::debug!("Found text in main clipboard.");
-                if let Err(e) = run(&sentence, config.clone()) {
-                    tracing::warn!(
-                        "Failed while running text mode in watch mode due to error: {e}"
-                    );
+
+                initial_content = get_clipboard_content(&mut clipboard);
+            }
+        });
+
+        loop {
+            match first_receiver.recv() {
+                Ok(first_sentence) => {
+                    tracing::info!("Opening window with first sentence.");
+
+                    app_is_running.store(true, Ordering::SeqCst);
+
+                    if let Err(e) = open_app(
+                        &first_sentence,
+                        config.clone(),
+                        Some(Arc::clone(&new_sentence_channel)),
+                    ) {
+                        tracing::warn!(
+                            "Failed while running in keep-open watch mode due to error: {e}"
+                        );
+                    }
+
+                    app_is_running.store(false, Ordering::SeqCst);
+
+                    if let Ok(mut lock) = new_sentence_channel.lock() {
+                        *lock = None;
+                    }
+
+                    tracing::info!("Window closed, continuing to watch.");
+                }
+                Err(e) => {
+                    return Err(Box::from(format!(
+                        "Keep-open watcher thread exited before finding any valid content: {e}"
+                    )));
                 }
             }
+        }
+    } else {
+        let mut clipboard: Clipboard = Clipboard::new()?;
+        let mut initial_content: ClipboardContent = get_clipboard_content(&mut clipboard);
 
-            // Getting clipboard content again here instead of replacing with current_content
-            // makes sure that clipboard changes while app was running aren't acted on
-            initial_content = get_clipboard_content(&mut clipboard);
+        let mut manga_ocr: Option<MangaOcr> = None;
+
+        tracing::info!("Watching...");
+        let mut was_paused = false;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+
+            if paused.load(Ordering::Relaxed) {
+                was_paused = true;
+                continue;
+            }
+            if was_paused {
+                // Replace initial_content with current here to prevent acting on clipboard content
+                // that was copied while paused.
+                initial_content = get_clipboard_content(&mut clipboard);
+                was_paused = false;
+            }
+
+            let current_content: ClipboardContent = get_clipboard_content(&mut clipboard);
+            if clipboard_content_differs(&initial_content, &current_content) {
+                tracing::info!("New clipboard content detected.");
+
+                if let Some(image) = current_content.image {
+                    tracing::debug!("Found image data in main clipboard.");
+
+                    match decode_clipboard_image(image) {
+                        Some(dynamic_image) => {
+                            if let Err(e) = ocr(
+                                dynamic_image,
+                                config.clone(),
+                                ocr_model.load(Ordering::Relaxed),
+                                &mut manga_ocr,
+                            ) {
+                                tracing::warn!(
+                                    "Failed while running OCR mode in watch mode due to error: {e}"
+                                );
+                            }
+                        }
+                        None => {
+                            tracing::warn!("Could not decode image data in clipboard.");
+                        }
+                    }
+                } else if let Some(sentence) = current_content.text {
+                    tracing::debug!("Found text in main clipboard.");
+                    if let Err(e) = run(&sentence, config.clone()) {
+                        tracing::warn!(
+                            "Failed while running text mode in watch mode due to error: {e}"
+                        );
+                    }
+                }
+
+                // Getting clipboard content again here instead of replacing with current_content
+                // makes sure that clipboard changes while app was running aren't acted on
+                initial_content = get_clipboard_content(&mut clipboard);
+            }
         }
     }
 

@@ -31,7 +31,11 @@ pub struct Config {
     pub font: String,
 }
 
-pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
+pub fn run_app(
+    sentence: &str,
+    config: Config,
+    new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
+) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
     let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
     #[cfg(feature = "hyprland-support")]
@@ -119,6 +123,7 @@ pub fn run_app(sentence: &str, config: Config) -> Result<(), eframe::Error> {
                 #[cfg(feature = "hyprland-support")]
                 is_hyprland,
                 sentence,
+                new_sentence_mutex,
             )))
         }),
     )
@@ -144,6 +149,7 @@ pub struct MyApp {
     main_frame: Option<egui::containers::Frame>,
     edit_mode: bool,
     was_edited: bool,
+    new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
 }
 
 impl MyApp {
@@ -153,6 +159,7 @@ impl MyApp {
         init_pos: Option<Pos2>,
         #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
+        new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
     ) -> Self {
         crate::font_helper::load_main_font(&cc.egui_ctx, &config.font);
 
@@ -181,6 +188,7 @@ impl MyApp {
             main_frame: None,
             edit_mode: false,
             was_edited: false,
+            new_sentence_mutex,
         };
 
         app.try_load_plugin(init_plugin_idx, false);
@@ -415,6 +423,28 @@ impl eframe::App for MyApp {
         }
 
         let main_frame = self.main_frame.unwrap();
+
+        // Check if watcher has new sentence in keep_open mode
+        let mut new_sentence: Option<String> = None;
+        if let Some(mutex) = &self.new_sentence_mutex {
+            ctx.request_repaint_after(std::time::Duration::from_millis(167));
+
+            if let Ok(mut lock) = mutex.try_lock() {
+                if let Some(sentence) = lock.take() {
+                    new_sentence = Some(sentence);
+                }
+            }
+        }
+        if let Some(sentence) = new_sentence {
+            if sentence != self.sentence {
+                tracing::info!("Updating sentence received from background watcher.");
+
+                self.sentence = sentence;
+                self.edit_mode = false;
+                self.was_edited = false;
+                self.try_load_plugin(self.active_plugin_index, true);
+            }
+        }
 
         egui::CentralPanel::default()
             .frame(main_frame)

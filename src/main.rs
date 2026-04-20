@@ -92,6 +92,10 @@ struct Options {
     #[arg(long = "tray", help_heading = None)]
     show_tray_icon: bool,
 
+    /// Keep the window open and update with new clipboard content (watch mode only)
+    #[arg(long = "keep-open", help_heading = None)]
+    keep_open: bool,
+
     /// Enable verbose logging to terminal/console
     #[arg(long = "verbose", help_heading = None)]
     verbose: bool,
@@ -184,9 +188,12 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
-            if let Err(e) =
-                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
-            {
+            if let Err(e) = popup_dictionary::watch(
+                config,
+                Arc::clone(&paused),
+                Arc::clone(&ocr_model),
+                cli.options.keep_open,
+            ) {
                 tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
@@ -208,13 +215,13 @@ fn main() -> ExitCode {
                 }
             }
         } else {
-            tracing::info!("No mode specified. Defaulting to watch mode with tray icon.");
-            // Default to watch mode with tray icon if no mode set
+            tracing::info!("No mode specified. Defaulting to keep-open watch mode with tray icon.");
+            // Default to keep-open watch mode with tray icon if no mode set
             if !config.show_tray_icon {
                 crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
             }
             if let Err(e) =
-                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
+                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model), true)
             {
                 tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
@@ -238,9 +245,12 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         } else if cli.modes.watch {
-            if let Err(e) =
-                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
-            {
+            if let Err(e) = popup_dictionary::watch(
+                config,
+                Arc::clone(&paused),
+                Arc::clone(&ocr_model),
+                cli.options.keep_open,
+            ) {
                 tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;
             }
@@ -262,13 +272,13 @@ fn main() -> ExitCode {
                 }
             }
         } else {
-            tracing::info!("No mode specified. Defaulting to watch mode with tray icon.");
-            // Default to watch mode with tray icon if no mode set
+            tracing::info!("No mode specified. Defaulting to keep-open watch mode with tray icon.");
+            // Default to keep-open watch mode with tray icon if no mode set
             if !config.show_tray_icon {
                 crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
             }
             if let Err(e) =
-                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model))
+                popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model), true)
             {
                 tracing::error!("Failed while running watch mode due to error: {e}");
                 return ExitCode::FAILURE;

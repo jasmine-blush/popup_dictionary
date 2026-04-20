@@ -17,6 +17,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   (currently Kihon and MangaOCR).
 - **Kihon:** A version flag into the Kihon database. It will now automatically
   regenerate when a newer database version is required.
+- **CLI:** A `--keep-open` argument which updates the app with new inputs from
+  the clipboard in watch mode even while the window is already/still open.
 
 ### Changed
 
@@ -28,6 +30,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   will now show its "Other forms" in the definition.
 - **Internal:** Pinned MangaOCR dependencies to a specific version to avoid
   potential unwanted updates.
+- **Core:** The default launch behaviour when no arguments are provided now
+  includes `--keep-open`.
 
 ### Deprecated
 
