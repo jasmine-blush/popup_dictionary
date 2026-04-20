@@ -204,7 +204,7 @@ pub fn watch(
             tracing::info!("Watching...");
             let mut was_paused = false;
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(200));
+                std::thread::sleep(std::time::Duration::from_millis(100));
 
                 if paused_clone.load(Ordering::Relaxed) {
                     was_paused = true;
@@ -314,7 +314,7 @@ pub fn watch(
         tracing::info!("Watching...");
         let mut was_paused = false;
         loop {
-            std::thread::sleep(std::time::Duration::from_millis(200));
+            std::thread::sleep(std::time::Duration::from_millis(100));
 
             if paused.load(Ordering::Relaxed) {
                 was_paused = true;
