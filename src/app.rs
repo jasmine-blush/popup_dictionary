@@ -131,8 +131,9 @@ pub fn run_app(
 
 enum PluginState {
     Initial,
-    Loading,
+    Loading(Arc<Mutex<String>>),
     Ready(Box<dyn Plugin>),
+    Error(String),
 }
 
 pub struct MyApp {
@@ -231,11 +232,13 @@ impl MyApp {
             return;
         }
 
+        let progress = Arc::new(Mutex::new(String::default()));
+        let progress_for_thread = Arc::clone(&progress);
         let state_clone: Arc<Mutex<PluginState>> = Arc::clone(&self.plugin_state);
         {
             let mut state = state_clone.lock().unwrap();
             match *state {
-                PluginState::Loading => {
+                PluginState::Loading(_) => {
                     tracing::info!("A plugin is currently loading.");
                     return;
                 }
@@ -244,10 +247,10 @@ impl MyApp {
                         tracing::info!("The same plugin is already loaded.");
                         return;
                     }
-                    *state = PluginState::Loading;
+                    *state = PluginState::Loading(progress);
                 }
                 _ => {
-                    *state = PluginState::Loading;
+                    *state = PluginState::Loading(progress);
                 }
             }
         }
@@ -256,8 +259,22 @@ impl MyApp {
         let plugin_sentence: String = self.sentence.to_owned();
         std::thread::spawn(move || {
             // TODO: Implement error handling, logging?
-            let plugin: Box<dyn Plugin> = active_plugin.generate(&plugin_sentence);
-            *state_clone.lock().unwrap() = PluginState::Ready(plugin);
+            let result = std::panic::catch_unwind(move || {
+                active_plugin.generate(&plugin_sentence, progress_for_thread)
+            });
+
+            let mut state = state_clone.lock().unwrap();
+            match result {
+                Ok(plugin) => *state = PluginState::Ready(plugin),
+                Err(_) => {
+                    tracing::error!(
+                        "Plugin loading failed. A previous instance may still be loading in the background. Please wait a few minutes and try again."
+                    );
+                    *state = PluginState::Error(
+                        "Plugin loading failed.\nA previous instance may still be loading in the background.\nPlease wait a few minutes and try again.".to_string(),
+                    );
+                }
+            }
         });
 
         self.selected_token_index = None;
@@ -613,22 +630,31 @@ impl eframe::App for MyApp {
                                 );
                             });
                     }
-                    _ => {
+                    PluginState::Loading(progress) => {
                         let center_height = ui.available_height() - footer_height;
                         ui.allocate_ui_with_layout(
                             egui::vec2(ui.available_width(), center_height),
                             egui::Layout::centered_and_justified(egui::Direction::TopDown),
                             |ui| {
                                 ui.horizontal(|ui| {
+                                    let mut progress_info: String = String::new();
+                                    if let Ok(pi) = progress.lock() {
+                                        progress_info.push_str(&pi);
+                                    }
+                                    if progress_info.is_empty() {
+                                        progress_info = String::from("Loading plugin...");
+                                    }
                                     // horizontal centering by ms-eevee on github:
                                     //
                                     // We create a closure function containing our elements, as we will be calling it twice.
                                     // Any additional elements to be centered would go within this closure.
                                     let elements = |ui: &mut egui::Ui| {
                                         ui.spinner();
-                                        ui.add(egui::Label::new(RichText::new(
-                                            "Loading Plugin...",
-                                        )));
+                                        ui.add(egui::Label::new(
+                                            RichText::new(format!("{}", progress_info))
+                                                .size(PRIMARY_TEXT_SIZE)
+                                                .color(PRIMARY_TEXT_COLOR),
+                                        ));
                                     };
 
                                     // Create a new child Ui with the invisible flag set so that the element does not actually
@@ -654,6 +680,22 @@ impl eframe::App for MyApp {
                         );
                         //ctx.request_repaint();
                     }
+                    PluginState::Error(e) => {
+                        let center_height = ui.available_height() - footer_height;
+                        egui::ScrollArea::vertical()
+                            .id_salt("plugin_display_section")
+                            .max_height(center_height)
+                            .auto_shrink(false)
+                            .show(ui, |ui| {
+                                let error_info = e.clone();
+                                ui.add(egui::Label::new(
+                                    RichText::new(format!("{}", error_info))
+                                        .size(SMALL_TEXT_SIZE)
+                                        .color(PRIMARY_TEXT_COLOR),
+                                ));
+                            });
+                    }
+                    _ => {}
                 }
 
                 ui.allocate_ui_with_layout(

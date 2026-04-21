@@ -19,6 +19,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   regenerate when a newer database version is required.
 - **CLI:** A `--keep-open` argument which updates the app with new inputs from
   the clipboard in watch mode even while the window is already/still open.
+- **UI:** Plugins can now display helpful status information while loading.
 
 ### Changed
 

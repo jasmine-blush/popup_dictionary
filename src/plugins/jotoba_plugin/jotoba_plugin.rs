@@ -6,11 +6,14 @@ use egui::Ui;
 use egui::containers::Frame;
 use std::cell::RefCell;
 use std::error::Error;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::app;
 use crate::app::MyApp;
 use crate::plugin::Plugin;
 use crate::plugin::Token;
+use crate::plugin::change_progress;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::Furigana;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::JotobaTokenizer;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::PartOfSpeech;
@@ -21,8 +24,9 @@ pub struct JotobaPlugin {
 }
 
 impl Plugin for JotobaPlugin {
-    fn load_plugin(sentence: &str) -> Self {
+    fn load_plugin(sentence: &str, progress: Arc<Mutex<String>>) -> Self {
         let mut jotoba_tokenizer: JotobaTokenizer = JotobaTokenizer::new();
+        change_progress(&progress, "Tokenizing...");
         match jotoba_tokenizer.tokenize(sentence) {
             Ok(tokens) => Self {
                 tokens,

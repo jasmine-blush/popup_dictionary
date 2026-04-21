@@ -5,6 +5,9 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use crate::plugin::change_progress;
 
 #[derive(Clone)]
 pub struct Dictionary {
@@ -108,7 +111,10 @@ pub struct Furigana {
 const DB_VERSION_FLAG: &str = "db_version_001";
 
 impl Dictionary {
-    pub fn load_dictionary(path: &PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn load_dictionary(
+        path: &PathBuf,
+        progress: &Arc<Mutex<String>>,
+    ) -> Result<Self, Box<dyn Error>> {
         let db: Db = sled::open(path)?;
 
         if db.was_recovered() {
@@ -118,14 +124,17 @@ impl Dictionary {
             db.clear()?;
         }
 
-        Self::populate_database(&db)?;
+        Self::populate_database(&db, progress)?;
         Ok(Self { db })
     }
 
-    fn populate_database(db: &Db) -> Result<&Db, Box<dyn Error>> {
+    fn populate_database<'a, 'b>(
+        db: &'a Db,
+        progress: &'b Arc<Mutex<String>>,
+    ) -> Result<&'a Db, Box<dyn Error>> {
         tracing::info!("Trying to populate database for Kihon plugin.");
 
-        Self::parse_jmdict_simplified(&db)?;
+        Self::parse_jmdict_simplified(&db, progress)?;
         db.insert(DB_VERSION_FLAG, "")?;
         db.flush()?;
         crate::plugins::kihon_plugin::dependencies::cleanup_files();
@@ -180,7 +189,14 @@ impl Dictionary {
         }
     }
 
-    fn parse_jmdict_simplified(db: &Db) -> Result<(), Box<dyn Error>> {
+    fn parse_jmdict_simplified(
+        db: &Db,
+        progress: &Arc<Mutex<String>>,
+    ) -> Result<(), Box<dyn Error>> {
+        change_progress(
+            &progress,
+            "Downloading datasets. \nThis may take a few minutes.",
+        );
         let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
         let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
 
@@ -202,6 +218,11 @@ impl Dictionary {
         }
         let file: File = File::open(jmdict_simplified_path)?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
+
+        change_progress(
+            &progress,
+            "Generating dictionary database. \nThis may take a few minutes.",
+        );
 
         let wildcard: String = String::from("*");
         for word in &jmdict.words {

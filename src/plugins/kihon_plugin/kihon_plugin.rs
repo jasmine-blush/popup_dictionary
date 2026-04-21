@@ -4,12 +4,15 @@ use egui::RichText;
 use egui::Ui;
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::app;
 use crate::app::MyApp;
 use crate::app::SPACING_SIZE;
 use crate::plugin::Plugin;
 use crate::plugin::Token;
+use crate::plugin::change_progress;
 use crate::plugins::kihon_plugin::jmdict_dictionary::AltForm;
 use crate::plugins::kihon_plugin::jmdict_dictionary::{
     Dictionary, DictionaryEntry, DictionaryTerm, Furigana,
@@ -25,7 +28,7 @@ pub struct KihonPlugin {
 }
 
 impl Plugin for KihonPlugin {
-    fn load_plugin(sentence: &str) -> Self {
+    fn load_plugin(sentence: &str, progress: Arc<Mutex<String>>) -> Self {
         let result: Result<Self, Box<dyn Error>> = (|| {
             let db_path: PathBuf = match dirs::data_dir() {
                 Some(path) => path.join("popup_dictionary").join("db"),
@@ -36,8 +39,10 @@ impl Plugin for KihonPlugin {
                 }
             };
 
-            let dictionary = Dictionary::load_dictionary(&db_path)?;
+            change_progress(&progress, "Loading dictionary...");
+            let dictionary = Dictionary::load_dictionary(&db_path, &progress)?;
 
+            change_progress(&progress, "Tokenizing...");
             let tokens = tokenize(&sentence.to_string(), &dictionary)?;
 
             Ok(Self { tokens, dictionary })

@@ -1,11 +1,12 @@
 use egui::containers::Frame;
 use egui::{Context, Ui};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app::MyApp;
 
 pub trait Plugin: Send + 'static {
-    fn load_plugin(sentence: &str) -> Self
+    fn load_plugin(sentence: &str, progress: Arc<Mutex<String>>) -> Self
     where
         Self: Sized;
     fn get_tokens(&self) -> &Vec<Token>;
@@ -31,15 +32,19 @@ impl Plugins {
         }
     }
 
-    pub fn generate(&self, sentence: &str) -> Box<dyn Plugin> {
+    pub fn generate(&self, sentence: &str, progress: Arc<Mutex<String>>) -> Box<dyn Plugin> {
         let start: Instant = Instant::now();
 
         let result: Box<dyn Plugin> = match self {
             Plugins::Kihon => Box::new(
-                crate::plugins::kihon_plugin::kihon_plugin::KihonPlugin::load_plugin(sentence),
+                crate::plugins::kihon_plugin::kihon_plugin::KihonPlugin::load_plugin(
+                    sentence, progress,
+                ),
             ),
             Plugins::Jotoba => Box::new(
-                crate::plugins::jotoba_plugin::jotoba_plugin::JotobaPlugin::load_plugin(sentence),
+                crate::plugins::jotoba_plugin::jotoba_plugin::JotobaPlugin::load_plugin(
+                    sentence, progress,
+                ),
             ),
         };
 
@@ -76,5 +81,12 @@ impl Token {
             Validity::INVALID => false,
             _ => true,
         }
+    }
+}
+
+pub fn change_progress(mutex: &Arc<Mutex<String>>, progress: &str) {
+    if let Ok(mut pi) = mutex.lock() {
+        pi.clear();
+        pi.push_str(progress);
     }
 }
