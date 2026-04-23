@@ -138,7 +138,7 @@ fn main() -> ExitCode {
         env!("CARGO_PKG_VERSION")
     );
 
-    let config: popup_dictionary::app::Config = popup_dictionary::app::Config {
+    let mut config: popup_dictionary::app::Config = popup_dictionary::app::Config {
         initial_plugin: cli.options.initial_plugin,
         open_at_cursor: cli.options.open_at_cursor,
         wrapped: cli.options.wrapped,
@@ -220,6 +220,7 @@ fn main() -> ExitCode {
             if !config.show_tray_icon {
                 crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
             }
+            config.open_at_cursor = true;
             if let Err(e) =
                 popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model), true)
             {
@@ -277,6 +278,7 @@ fn main() -> ExitCode {
             if !config.show_tray_icon {
                 crate::tray::spawn_tray_icon(Arc::clone(&paused), Arc::clone(&ocr_model));
             }
+            config.open_at_cursor = true;
             if let Err(e) =
                 popup_dictionary::watch(config, Arc::clone(&paused), Arc::clone(&ocr_model), true)
             {
