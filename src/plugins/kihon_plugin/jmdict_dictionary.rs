@@ -1,11 +1,11 @@
+use ahash::AHashMap;
 use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use crate::plugin::change_progress;
 
@@ -22,20 +22,26 @@ pub struct DictionaryEntry {
 #[derive(bincode::Encode, bincode::Decode, Clone, Debug)]
 pub struct DictionaryTerm {
     pub id: String,
-    pub frequency: Option<u32>,
+    pub frequency: Option<usize>,
     pub common: bool,
     pub term: String,
     pub reading: String,
     pub alt_forms: Vec<AltForm>,
-    pub furigana: Option<Vec<Furigana>>,
+    pub furigana: Option<Vec<DictionaryFurigana>>,
     pub meanings: Vec<DictionaryMeaning>,
+}
+
+#[derive(bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
+pub struct DictionaryFurigana {
+    pub ruby: String,
+    pub rt: Option<String>,
 }
 
 #[derive(bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
 pub struct AltForm {
     pub term: String,
     pub reading: String,
-    pub furigana: Option<Vec<Furigana>>,
+    pub furigana: Option<Vec<DictionaryFurigana>>,
 }
 
 #[derive(bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
@@ -95,18 +101,24 @@ struct Gloss {
 
 // jmdict-furigana json
 #[derive(Serialize, Deserialize, Debug)]
-struct JMDictFurigana {
-    text: String,
-    reading: String,
-    furigana: Vec<Furigana>,
+struct JMDictFurigana<'a> {
+    text: &'a str,
+    reading: &'a str,
+    furigana: Vec<Furigana<'a>>,
 }
 
-#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
-pub struct Furigana {
-    pub ruby: String,
-    pub rt: Option<String>,
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Furigana<'a> {
+    pub ruby: &'a str,
+    pub rt: Option<&'a str>,
 }
 // ---
+
+struct Dependencies {
+    leeds: String,
+    furigana: String,
+    simplified: String,
+}
 
 const DB_VERSION_FLAG: &str = "db_version_001";
 
@@ -133,12 +145,13 @@ impl Dictionary {
         progress: &'b Arc<Mutex<String>>,
     ) -> Result<&'a Db, Box<dyn Error>> {
         tracing::info!("Trying to populate database for Kihon plugin.");
+        let start: Instant = Instant::now();
 
-        Self::verify_dependencies(progress)?;
-        Self::parse_jmdict_simplified(&db, progress)?;
+        let dependencies = Self::fetch_dependencies(progress)?;
+        Self::parse_jmdict_simplified(&db, dependencies, progress, start)?;
         db.insert(DB_VERSION_FLAG, "")?;
         db.flush()?;
-        crate::plugins::kihon_plugin::dependencies::cleanup_files();
+
         Ok(db)
     }
 
@@ -190,78 +203,30 @@ impl Dictionary {
         }
     }
 
-    fn verify_dependencies(progress: &Arc<Mutex<String>>) -> Result<(), Box<dyn Error>> {
+    fn fetch_dependencies(progress: &Arc<Mutex<String>>) -> Result<Dependencies, Box<dyn Error>> {
         change_progress(
             progress,
             "Downloading datasets [0/3]. \nThis may take a few minutes.",
         );
         // jmdict-simplified.json
         let jmdict_simplified_handle = std::thread::spawn(|| {
-            tracing::debug!("Checking for jmdict-simplified.");
+            tracing::debug!("Downloading jmdict-simplified.");
 
-            let mut data_path: PathBuf = match dirs::data_dir() {
-                Some(path) => path,
-                None => Err("No valid data path found in environment variables.").unwrap(),
-            };
-            data_path = data_path.join("popup_dictionary").join("dicts");
-
-            let jmdict_simplified_path = data_path.join("jmdict-simplified.json");
-            if !jmdict_simplified_path
-                .try_exists()
-                .is_ok_and(|verified| verified == true)
-            {
-                crate::plugins::kihon_plugin::dependencies::fetch_jmdict_simplified(
-                    &jmdict_simplified_path,
-                )
-                .unwrap();
-            }
-            true
+            crate::plugins::kihon_plugin::dependencies::get_jmdict_simplified().unwrap()
         });
 
         // jmdict-furigana.json
         let jmdict_furigana_handle = std::thread::spawn(|| {
-            tracing::debug!("Checking for jmdict-simplified.");
+            tracing::debug!("Downloading jmdict-furigana.");
 
-            let mut data_path: PathBuf = match dirs::data_dir() {
-                Some(path) => path,
-                None => Err("No valid data path found in environment variables.").unwrap(),
-            };
-            data_path = data_path.join("popup_dictionary").join("dicts");
-
-            let jmdict_furigana_path = data_path.join("jmdict-furigana.json");
-            if !jmdict_furigana_path
-                .try_exists()
-                .is_ok_and(|verified| verified == true)
-            {
-                crate::plugins::kihon_plugin::dependencies::fetch_jmdict_furigana(
-                    &jmdict_furigana_path,
-                )
-                .unwrap();
-            }
-            true
+            crate::plugins::kihon_plugin::dependencies::get_jmdict_furigana().unwrap()
         });
 
         // leeds-corpus-frequency.txt
         let leeds_frequency_handle = std::thread::spawn(|| {
-            tracing::debug!("Checking for jmdict-simplified.");
+            tracing::debug!("Downloading leeds-corpus-frequency.");
 
-            let mut data_path: PathBuf = match dirs::data_dir() {
-                Some(path) => path,
-                None => Err("No valid data path found in environment variables.").unwrap(),
-            };
-            data_path = data_path.join("popup_dictionary").join("dicts");
-
-            let leeds_frequency_path = data_path.join("leeds-corpus-frequency.txt");
-            if !leeds_frequency_path
-                .try_exists()
-                .is_ok_and(|verified| verified == true)
-            {
-                crate::plugins::kihon_plugin::dependencies::fetch_leeds_frequencies(
-                    &leeds_frequency_path,
-                )
-                .unwrap();
-            }
-            true
+            crate::plugins::kihon_plugin::dependencies::get_leeds_frequencies().unwrap()
         });
 
         change_progress(
@@ -270,7 +235,7 @@ impl Dictionary {
         );
         let leeds_frequency = leeds_frequency_handle
             .join()
-            .map_err(|e| format!("Could not download leeds-corpus-frequency file: {:?}", e))?;
+            .map_err(|e| format!("Could not download leeds-corpus-frequency: {:?}", e))?;
         tracing::debug!("leeds-corpus-frequency successfully downloaded.");
         change_progress(
             progress,
@@ -278,7 +243,7 @@ impl Dictionary {
         );
         let jmdict_furigana = jmdict_furigana_handle
             .join()
-            .map_err(|e| format!("Could not download jmdict-furigana file: {:?}", e))?;
+            .map_err(|e| format!("Could not download jmdict-furigan: {:?}", e))?;
         tracing::debug!("jmdict-furigana successfully downloaded.");
         change_progress(
             progress,
@@ -286,48 +251,65 @@ impl Dictionary {
         );
         let jmdict_simplified = jmdict_simplified_handle
             .join()
-            .map_err(|e| format!("Could not download jmdict-simplified file: {:?}", e))?;
+            .map_err(|e| format!("Could not download jmdict-simplified: {:?}", e))?;
         tracing::debug!("jmdict-simplified successfully downloaded.");
 
-        Ok(())
+        Ok(Dependencies {
+            leeds: leeds_frequency,
+            furigana: jmdict_furigana,
+            simplified: jmdict_simplified,
+        })
     }
 
     fn parse_jmdict_simplified(
         db: &Db,
+        dependencies: Dependencies,
         progress: &Arc<Mutex<String>>,
+        start: Instant,
     ) -> Result<(), Box<dyn Error>> {
+        let start_leeds: Instant = Instant::now();
         change_progress(
             &progress,
             "Parsing frequency data. \nThis may take a few minutes.",
         );
-        let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
+        let frequency_map: AHashMap<&str, usize> =
+            Self::parse_leeds_frequencies(&dependencies.leeds)?;
+        let leeds_duration = start_leeds.elapsed();
+        let start_furigana: Instant = Instant::now();
         change_progress(
             &progress,
             "Parsing furigana data. \nThis may take a few minutes.",
         );
-        let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
+        let furigana_map: AHashMap<(&str, &str), Vec<Furigana>> =
+            Self::parse_jmdict_furigana(&dependencies.furigana)?;
+        let furigana_duration = start_furigana.elapsed();
 
-        let mut jmdict_simplified_path: PathBuf = match dirs::data_dir() {
-            Some(path) => path,
-            None => Err("No valid data path found in environment variables.")?,
-        };
-        jmdict_simplified_path = jmdict_simplified_path
-            .join("popup_dictionary")
-            .join("dicts")
-            .join("jmdict-simplified.json");
-
+        let start_simple: Instant = Instant::now();
         change_progress(
             &progress,
             "Parsing dictionary data. \nThis may take a few minutes.",
         );
-        let file: File = File::open(jmdict_simplified_path)?;
-        let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
+        let jmdict: JMDict = serde_json::from_str(&dependencies.simplified)?;
+        let simple_duration: Duration = start_simple.elapsed();
+        println!(
+            "Parsed in... leeds: {:.3} ms, furigana: {:.3} ms, simple: {:.3} ms",
+            leeds_duration.as_secs_f64() * 1000.0,
+            furigana_duration.as_secs_f64() * 1000.0,
+            simple_duration.as_secs_f64() * 1000.0
+        );
+        let duration: Duration = start.elapsed();
+        println!(
+            "Fetched and parsed all in: {:.3} ms",
+            duration.as_secs_f64() * 1000.0
+        );
 
+        let start_db: Instant = Instant::now();
         change_progress(
             &progress,
             "Generating dictionary database. \nThis may take a few minutes.",
         );
 
+        let mut insert_durations: f64 = 0.0;
         let wildcard: String = String::from("*");
         for word in &jmdict.words {
             let mut entries: Vec<(String, DictionaryTerm)> = Vec::new();
@@ -351,10 +333,21 @@ impl Dictionary {
                             &jmdict.tags,
                         );
 
-                        let mut frequency = frequency_map.get(&kanji.text);
+                        let mut frequency = frequency_map.get(&kanji.text.as_str());
                         if frequency.is_none() {
-                            frequency = frequency_map.get(&kana.text);
+                            frequency = frequency_map.get(&kana.text.as_str());
                         }
+
+                        let furigana = furigana_map
+                            .get(&(kanji.text.as_str(), kana.text.as_str()))
+                            .map(|f| {
+                                f.iter()
+                                    .map(|furigana| DictionaryFurigana {
+                                        ruby: furigana.ruby.to_string(),
+                                        rt: furigana.rt.map(|s| s.to_string()),
+                                    })
+                                    .collect::<Vec<DictionaryFurigana>>()
+                            });
 
                         entries.push((
                             format!("term:{}", kanji.text),
@@ -365,18 +358,26 @@ impl Dictionary {
                                 term: kanji.text.clone(),
                                 reading: kana.text.clone(),
                                 alt_forms: Vec::new(),
-                                furigana: furigana_map
-                                    .get(&format!("{},{}", &kanji.text, &kana.text))
-                                    .clone()
-                                    .map(|f| f.clone()),
+                                furigana,
                                 meanings: meanings.clone(),
                             },
                         ));
 
-                        let mut frequency = frequency_map.get(&kana.text);
+                        let mut frequency = frequency_map.get(&kana.text.as_str());
                         if frequency.is_none() {
-                            frequency = frequency_map.get(&kanji.text);
+                            frequency = frequency_map.get(&kanji.text.as_str());
                         }
+
+                        let furigana = furigana_map
+                            .get(&(kanji.text.as_str(), kana.text.as_str()))
+                            .map(|f| {
+                                f.iter()
+                                    .map(|furigana| DictionaryFurigana {
+                                        ruby: furigana.ruby.to_string(),
+                                        rt: furigana.rt.map(|s| s.to_string()),
+                                    })
+                                    .collect::<Vec<DictionaryFurigana>>()
+                            });
 
                         entries.push((
                             format!("reading:{}", kana.text),
@@ -387,10 +388,8 @@ impl Dictionary {
                                 term: kanji.text.clone(),
                                 reading: kana.text.clone(),
                                 alt_forms: Vec::new(),
-                                furigana: furigana_map
-                                    .get(&format!("{},{}", &kanji.text, &kana.text))
-                                    .clone()
-                                    .map(|f| f.clone()),
+                                furigana,
+
                                 meanings: meanings.clone(),
                             },
                         ));
@@ -418,7 +417,10 @@ impl Dictionary {
                         format!("reading:{}", kana.text),
                         DictionaryTerm {
                             id: current_id.clone(),
-                            frequency: frequency_map.get(&kana.text).clone().map(|f| f.clone()),
+                            frequency: frequency_map
+                                .get(&kana.text.as_str())
+                                .clone()
+                                .map(|f| f.clone()),
                             common: kana.common.clone(),
                             term: String::new(),
                             reading: kana.text.clone(),
@@ -447,6 +449,7 @@ impl Dictionary {
                         }
                     }
 
+                    let start_insert: Instant = Instant::now();
                     Self::insert_entry(
                         db,
                         key,
@@ -456,9 +459,10 @@ impl Dictionary {
                         &entry.term,
                         &entry.reading,
                         &alt_forms,
-                        &entry.furigana.as_ref(),
+                        &entry.furigana,
                         &entry.meanings,
                     )?;
+                    insert_durations += start_insert.elapsed().as_secs_f64();
                 }
             } else {
                 for kana in &word.kana {
@@ -478,7 +482,10 @@ impl Dictionary {
                         format!("reading:{}", kana.text),
                         DictionaryTerm {
                             id: current_id.clone(),
-                            frequency: frequency_map.get(&kana.text).clone().map(|f| f.clone()),
+                            frequency: frequency_map
+                                .get(&kana.text.as_str())
+                                .clone()
+                                .map(|f| f.clone()),
                             common: kana.common.clone(),
                             term: String::new(),
                             reading: kana.text.clone(),
@@ -501,6 +508,8 @@ impl Dictionary {
                             });
                         }
                     }
+
+                    let start_insert: Instant = Instant::now();
                     Self::insert_entry(
                         db,
                         key,
@@ -510,71 +519,66 @@ impl Dictionary {
                         &entry.term,
                         &entry.reading,
                         &alt_forms,
-                        &entry.furigana.as_ref(),
+                        &entry.furigana,
                         &entry.meanings,
                     )?;
+                    insert_durations += start_insert.elapsed().as_secs_f64();
                 }
             }
         }
+
+        let db_duration: Duration = start_db.elapsed();
+        println!(
+            "Generated db in: {:.3} ms, inserts: {:.3} ms",
+            db_duration.as_secs_f64() * 1000.0,
+            insert_durations * 1000.0
+        );
 
         db.flush()?;
 
         Ok(())
     }
 
-    fn parse_leeds_frequencies() -> Result<HashMap<String, u32>, Box<dyn Error>> {
-        let mut frequency_map: HashMap<String, u32> = HashMap::new();
-        let mut leeds_frequency_path: PathBuf = match dirs::data_dir() {
-            Some(path) => path,
-            None => Err("No valid data path found in environment variables.")?,
-        };
-
-        leeds_frequency_path = leeds_frequency_path
-            .join("popup_dictionary")
-            .join("dicts")
-            .join("leeds-corpus-frequency.txt");
-
-        let file: File = File::open(leeds_frequency_path)?;
-
-        // note: prone to overflow?
-        let mut line_num: u32 = 0;
-        for line in BufReader::new(file).lines().map_while(Result::ok) {
-            frequency_map.insert(line, line_num);
-            line_num += 1;
-        }
+    fn parse_leeds_frequencies(
+        leeds_string: &str,
+    ) -> Result<AHashMap<&str, usize>, Box<dyn Error>> {
+        let frequency_map: AHashMap<&str, usize> = leeds_string
+            .lines()
+            .enumerate()
+            .map(|(i, l)| (l, i))
+            .collect();
 
         Ok(frequency_map)
     }
 
-    fn parse_jmdict_furigana() -> Result<HashMap<String, Vec<Furigana>>, Box<dyn Error>> {
-        let mut furigana_map: HashMap<String, Vec<Furigana>> = HashMap::new();
+    fn parse_jmdict_furigana(
+        furigana_string: &str,
+    ) -> Result<AHashMap<(&str, &str), Vec<Furigana<'_>>>, Box<dyn Error>> {
+        let start: Instant = Instant::now();
 
-        let mut jmdict_furigana_path: PathBuf = match dirs::data_dir() {
-            Some(path) => path,
-            None => Err("No valid data path found in environment variables.")?,
-        };
-        jmdict_furigana_path = jmdict_furigana_path
-            .join("popup_dictionary")
-            .join("dicts")
-            .join("jmdict-furigana.json");
+        let json_string_safe = furigana_string
+            .strip_prefix('\u{FEFF}')
+            .unwrap_or(&furigana_string);
+        let parse: Instant = Instant::now();
+        let json: Vec<JMDictFurigana> = serde_json::from_str(json_string_safe)?;
+        let duration: Duration = start.elapsed();
+        let since_parse: Duration = parse.elapsed();
+        println!(
+            "Deserialized in: {:.3} ms, Parse: {:.3} ms",
+            duration.as_secs_f64() * 1000.0,
+            since_parse.as_secs_f64() * 1000.0
+        );
 
-        let file: File = File::open(jmdict_furigana_path)?;
+        let start: Instant = Instant::now();
 
-        // Handle BOM at file start
-        let mut reader = BufReader::new(file);
-        let mut bom = [0u8; 3];
-        if reader.read_exact(&mut bom).is_ok() && &bom != &[0xEF, 0xBB, 0xBF] {
-            reader.seek(SeekFrom::Start(0))?;
+        let mut furigana_map: AHashMap<(&str, &str), Vec<Furigana>> =
+            AHashMap::with_capacity(json.len());
+        for item in json {
+            furigana_map.insert((item.text, item.reading), item.furigana);
         }
-
-        let json: Vec<JMDictFurigana> = serde_json::from_reader(reader)?;
-
-        for jmdict_furigana in json {
-            furigana_map.insert(
-                format!("{},{}", jmdict_furigana.text, jmdict_furigana.reading),
-                jmdict_furigana.furigana,
-            );
-        }
+        let duration: Duration = start.elapsed();
+        println!("Mapped in: {:.3} ms", duration.as_secs_f64() * 1000.0);
+        println!("Entires: {}", furigana_map.len());
 
         Ok(furigana_map)
     }
@@ -625,22 +629,19 @@ impl Dictionary {
         db: &Db,
         key: &str,
         id: &str,
-        frequency: &Option<&u32>,
+        frequency: &Option<&usize>,
         common: &bool,
         term: &str,
         reading: &str,
         alt_forms: &Vec<AltForm>,
-        furigana: &Option<&Vec<Furigana>>,
+        furigana: &Option<Vec<DictionaryFurigana>>,
         meanings: &Vec<DictionaryMeaning>,
     ) -> Result<(), Box<dyn Error>> {
-        let frequency: Option<u32> = match frequency {
+        let frequency: Option<usize> = match frequency {
             Some(freq_value) => Some(**freq_value),
             None => None,
         };
-        let furigana: Option<Vec<Furigana>> = match furigana {
-            Some(furigana_vec) => Some(furigana_vec.to_vec()),
-            None => None,
-        };
+
         let dictionary_term: DictionaryTerm = DictionaryTerm {
             id: id.to_string(),
             frequency,
@@ -648,7 +649,7 @@ impl Dictionary {
             term: term.to_string(),
             reading: reading.to_string(),
             alt_forms: alt_forms.clone(),
-            furigana,
+            furigana: furigana.clone(),
             meanings: meanings.to_vec(),
         };
 

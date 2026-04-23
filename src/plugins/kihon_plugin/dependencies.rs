@@ -55,7 +55,7 @@ pub fn fetch_jumandic(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> 
 
             io::copy(&mut zstd_decoder, &mut out_file)?;
 
-            if let Err(e) = verify_hash(destination_path, JUMANDIC_HASH) {
+            if let Err(e) = verify_file_hash(destination_path, JUMANDIC_HASH) {
                 try_remove_file(destination_path.clone());
                 return Err(Box::from(e));
             }
@@ -67,7 +67,7 @@ pub fn fetch_jumandic(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> 
     Err(Box::from("No system dictionary found in archive"))
 }
 
-pub fn fetch_jmdict_simplified(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
+pub fn get_jmdict_simplified() -> Result<String, Box<dyn Error>> {
     let response = reqwest::blocking::get(JMDICT_SIMPLIFIED_URL)?;
 
     let gz_decoder = GzDecoder::new(response);
@@ -78,38 +78,28 @@ pub fn fetch_jmdict_simplified(destination_path: &PathBuf) -> Result<(), Box<dyn
         let path = entry.path()?;
 
         if path.ends_with("jmdict-eng-3.6.2.json") {
-            if let Some(parent) = destination_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let mut out_file = File::create(destination_path)?;
+            let mut buffer = Vec::new();
 
-            io::copy(&mut entry, &mut out_file)?;
+            entry.read_to_end(&mut buffer)?;
 
-            if let Err(e) = verify_hash(destination_path, JMDICT_SIMPLIFIED_HASH) {
-                try_remove_file(destination_path.clone());
-                return Err(Box::from(e));
-            }
-            return Ok(());
+            verify_buf_hash(&buffer, JMDICT_SIMPLIFIED_HASH)?;
+
+            let content =
+                String::from_utf8(buffer).map_err(|e| format!("Invalid UTF-8 sequence: {}", e))?;
+
+            return Ok(content);
         }
     }
 
     Err(Box::from("No JSON file found in .tgz archive"))
 }
 
-pub fn fetch_leeds_frequencies(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    fetch_file(
-        destination_path,
-        LEEDS_FREQUENCIES_URL,
-        LEEDS_FREQUENCIES_HASH,
-    )?;
-
-    Ok(())
+pub fn get_leeds_frequencies() -> Result<String, Box<dyn Error>> {
+    fetch_string(LEEDS_FREQUENCIES_URL, LEEDS_FREQUENCIES_HASH)
 }
 
-pub fn fetch_jmdict_furigana(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    fetch_file(destination_path, JMDICT_FURIGANA_URL, JMDICT_FURIGANA_HASH)?;
-
-    Ok(())
+pub fn get_jmdict_furigana() -> Result<String, Box<dyn Error>> {
+    fetch_string(JMDICT_FURIGANA_URL, JMDICT_FURIGANA_HASH)
 }
 
 pub fn fetch_manga_ocr_encoder(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
@@ -138,25 +128,6 @@ pub fn fetch_manga_ocr_vocab(destination_path: &PathBuf) -> Result<(), Box<dyn E
     Ok(())
 }
 
-pub fn cleanup_files() {
-    if let Some(mut data_dir_path) = dirs::data_dir() {
-        data_dir_path = data_dir_path.join("popup_dictionary").join("dicts");
-
-        let leeds_frequency_path = data_dir_path.clone().join("leeds-corpus-frequency.txt");
-        try_remove_file(leeds_frequency_path);
-
-        let jmdict_furigana_path = data_dir_path.clone().join("jmdict-furigana.json");
-        try_remove_file(jmdict_furigana_path);
-
-        let jmdict_simplified_path = data_dir_path.clone().join("jmdict-simplified.json");
-        try_remove_file(jmdict_simplified_path);
-    } else {
-        tracing::warn!(
-            "Could not cleanup files: No valid data path found in environment variables."
-        );
-    }
-}
-
 fn try_remove_file(path: PathBuf) {
     if let Err(e) = std::fs::remove_file(&path) {
         tracing::warn!("Could not cleanup {} due to error: {e}", path.display());
@@ -179,7 +150,7 @@ fn fetch_file(
 
     io::copy(&mut response, &mut out_file)?;
 
-    if let Err(e) = verify_hash(destination_path, expected_hex) {
+    if let Err(e) = verify_file_hash(destination_path, expected_hex) {
         try_remove_file(destination_path.clone());
         return Err(Box::from(e));
     }
@@ -187,7 +158,22 @@ fn fetch_file(
     Ok(())
 }
 
-fn verify_hash(path: &Path, expected_hex: &str) -> Result<(), Box<dyn Error>> {
+fn fetch_string(url: &str, expected_hex: &str) -> Result<String, Box<dyn Error>> {
+    let mut response = reqwest::blocking::get(url)?;
+
+    let mut buffer = Vec::new();
+
+    response.read_to_end(&mut buffer)?;
+
+    verify_buf_hash(&buffer, expected_hex)?;
+
+    let content =
+        String::from_utf8(buffer).map_err(|e| format!("Invalid UTF-8 sequence: {}", e))?;
+
+    return Ok(content);
+}
+
+fn verify_file_hash(path: &Path, expected_hex: &str) -> Result<(), Box<dyn Error>> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
 
@@ -206,6 +192,23 @@ fn verify_hash(path: &Path, expected_hex: &str) -> Result<(), Box<dyn Error>> {
         return Err(format!(
             "Hash mismatch for {:?}. Expected {}, actual {}",
             path, expected_hex, actual_hex
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn verify_buf_hash(buffer: &Vec<u8>, expected_hex: &str) -> Result<(), Box<dyn Error>> {
+    let mut hasher = Sha256::new();
+
+    hasher.update(buffer);
+
+    let actual_hex = hex::encode(hasher.finalize());
+
+    if actual_hex != expected_hex {
+        return Err(format!(
+            "Hash mismatch for buffer. Expected {}, actual {}",
+            expected_hex, actual_hex
         )
         .into());
     }

@@ -25,6 +25,7 @@ aho-corasick = "1.1.4"
 vibrato = "0.5.2"
 sled = "0.34.7"
 bincode = "2.0.1"
+ahash = "0.8.12"
 # dependency downloading
 reqwest = { version = "0.13.1", features = ["blocking"] }
 xz2 = { version = "0.1.7", features = ["static"] }

@@ -14,6 +14,7 @@ use crate::plugin::Plugin;
 use crate::plugin::Token;
 use crate::plugin::change_progress;
 use crate::plugins::kihon_plugin::jmdict_dictionary::AltForm;
+use crate::plugins::kihon_plugin::jmdict_dictionary::DictionaryFurigana;
 use crate::plugins::kihon_plugin::jmdict_dictionary::{
     Dictionary, DictionaryEntry, DictionaryTerm, Furigana,
 };
@@ -243,9 +244,9 @@ impl KihonPlugin {
                     if let Some(furigana_vec) = &dictionary_term.furigana {
                         Self::display_furigana(ui, furigana_vec, 1.0);
                     } else {
-                        let furigana: Vec<Furigana> = vec![Furigana {
-                            ruby: dictionary_term.term.to_string(),
-                            rt: Some(dictionary_term.reading.to_string()),
+                        let furigana: Vec<DictionaryFurigana> = vec![DictionaryFurigana {
+                            ruby: dictionary_term.term.clone(),
+                            rt: Some(dictionary_term.reading.clone()),
                         }];
                         Self::display_furigana(ui, &furigana, 1.0);
                     }
@@ -376,8 +377,9 @@ impl KihonPlugin {
                                                     .color(app::PRIMARY_TEXT_COLOR),
                                             );
                                         } else {
-                                            let mut furigana_vec: Vec<Furigana> = Vec::new();
-                                            furigana_vec.push(Furigana {
+                                            let mut furigana_vec: Vec<DictionaryFurigana> =
+                                                Vec::new();
+                                            furigana_vec.push(DictionaryFurigana {
                                                 ruby: form.term.clone(),
                                                 rt: Some(form.reading.clone()),
                                             });
@@ -462,7 +464,7 @@ impl KihonPlugin {
         //ui.allocate_space(rect.size());
     }
 
-    fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<Furigana>, font_scale: f32) {
+    fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<DictionaryFurigana>, font_scale: f32) {
         let vertical_gap: f32 = 1.0;
 
         // calculate how wide (and tall) the entire string will be
