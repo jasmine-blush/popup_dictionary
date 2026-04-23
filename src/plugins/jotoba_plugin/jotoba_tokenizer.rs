@@ -79,7 +79,7 @@ pub struct Reading {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Sense {
     pub glosses: Vec<String>,
-    pub pos: Vec<PartOfSpeech>,
+    pub pos: Option<Vec<PartOfSpeech>>,
     pub information: Option<String>,
     pub misc: Option<String>,
     pub xref: Option<String>, // "See also:"

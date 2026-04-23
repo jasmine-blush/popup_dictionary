@@ -100,8 +100,11 @@ impl Plugin for JotobaPlugin {
                         let mut count: u32 = 0;
                         let mut last_tags: Vec<PartOfSpeech> = Vec::new();
                         for sense in &word.senses {
-                            let tags: &Vec<PartOfSpeech> = &sense.pos;
-                            if *tags != last_tags {
+                            let tags: Vec<PartOfSpeech> = match &sense.pos {
+                                Some(tags) => tags.clone(),
+                                None => Vec::new(),
+                            };
+                            if tags != last_tags {
                                 last_tags = tags.clone();
                                 if count > 0 {
                                     ui.add_space(app::SPACING_SIZE);
