@@ -134,6 +134,7 @@ impl Dictionary {
     ) -> Result<&'a Db, Box<dyn Error>> {
         tracing::info!("Trying to populate database for Kihon plugin.");
 
+        Self::verify_dependencies(progress)?;
         Self::parse_jmdict_simplified(&db, progress)?;
         db.insert(DB_VERSION_FLAG, "")?;
         db.flush()?;
@@ -189,15 +190,121 @@ impl Dictionary {
         }
     }
 
+    fn verify_dependencies(progress: &Arc<Mutex<String>>) -> Result<(), Box<dyn Error>> {
+        change_progress(
+            progress,
+            "Downloading datasets [0/3]. \nThis may take a few minutes.",
+        );
+        // jmdict-simplified.json
+        let jmdict_simplified_handle = std::thread::spawn(|| {
+            tracing::debug!("Checking for jmdict-simplified.");
+
+            let mut data_path: PathBuf = match dirs::data_dir() {
+                Some(path) => path,
+                None => Err("No valid data path found in environment variables.").unwrap(),
+            };
+            data_path = data_path.join("popup_dictionary").join("dicts");
+
+            let jmdict_simplified_path = data_path.join("jmdict-simplified.json");
+            if !jmdict_simplified_path
+                .try_exists()
+                .is_ok_and(|verified| verified == true)
+            {
+                crate::plugins::kihon_plugin::dependencies::fetch_jmdict_simplified(
+                    &jmdict_simplified_path,
+                )
+                .unwrap();
+            }
+            true
+        });
+
+        // jmdict-furigana.json
+        let jmdict_furigana_handle = std::thread::spawn(|| {
+            tracing::debug!("Checking for jmdict-simplified.");
+
+            let mut data_path: PathBuf = match dirs::data_dir() {
+                Some(path) => path,
+                None => Err("No valid data path found in environment variables.").unwrap(),
+            };
+            data_path = data_path.join("popup_dictionary").join("dicts");
+
+            let jmdict_furigana_path = data_path.join("jmdict-furigana.json");
+            if !jmdict_furigana_path
+                .try_exists()
+                .is_ok_and(|verified| verified == true)
+            {
+                crate::plugins::kihon_plugin::dependencies::fetch_jmdict_furigana(
+                    &jmdict_furigana_path,
+                )
+                .unwrap();
+            }
+            true
+        });
+
+        // leeds-corpus-frequency.txt
+        let leeds_frequency_handle = std::thread::spawn(|| {
+            tracing::debug!("Checking for jmdict-simplified.");
+
+            let mut data_path: PathBuf = match dirs::data_dir() {
+                Some(path) => path,
+                None => Err("No valid data path found in environment variables.").unwrap(),
+            };
+            data_path = data_path.join("popup_dictionary").join("dicts");
+
+            let leeds_frequency_path = data_path.join("leeds-corpus-frequency.txt");
+            if !leeds_frequency_path
+                .try_exists()
+                .is_ok_and(|verified| verified == true)
+            {
+                crate::plugins::kihon_plugin::dependencies::fetch_leeds_frequencies(
+                    &leeds_frequency_path,
+                )
+                .unwrap();
+            }
+            true
+        });
+
+        change_progress(
+            progress,
+            "Downloading datasets [1/3]. \nThis may take a few minutes.",
+        );
+        let leeds_frequency = leeds_frequency_handle
+            .join()
+            .map_err(|e| format!("Could not download leeds-corpus-frequency file: {:?}", e))?;
+        tracing::debug!("leeds-corpus-frequency successfully downloaded.");
+        change_progress(
+            progress,
+            "Downloading datasets [2/3]. \nThis may take a few minutes.",
+        );
+        let jmdict_furigana = jmdict_furigana_handle
+            .join()
+            .map_err(|e| format!("Could not download jmdict-furigana file: {:?}", e))?;
+        tracing::debug!("jmdict-furigana successfully downloaded.");
+        change_progress(
+            progress,
+            "Downloading datasets [3/3]. \nThis may take a few minutes.",
+        );
+        let jmdict_simplified = jmdict_simplified_handle
+            .join()
+            .map_err(|e| format!("Could not download jmdict-simplified file: {:?}", e))?;
+        tracing::debug!("jmdict-simplified successfully downloaded.");
+
+        Ok(())
+    }
+
     fn parse_jmdict_simplified(
         db: &Db,
         progress: &Arc<Mutex<String>>,
     ) -> Result<(), Box<dyn Error>> {
         change_progress(
             &progress,
-            "Downloading datasets. \nThis may take a few minutes.",
+            "Parsing frequency data. \nThis may take a few minutes.",
         );
         let frequency_map: HashMap<String, u32> = Self::parse_leeds_frequencies()?;
+        change_progress(
+            &progress,
+            "Parsing furigana data. \nThis may take a few minutes.",
+        );
         let furigana_map: HashMap<String, Vec<Furigana>> = Self::parse_jmdict_furigana()?;
 
         let mut jmdict_simplified_path: PathBuf = match dirs::data_dir() {
@@ -208,14 +315,11 @@ impl Dictionary {
             .join("popup_dictionary")
             .join("dicts")
             .join("jmdict-simplified.json");
-        if !jmdict_simplified_path
-            .try_exists()
-            .is_ok_and(|verified| verified == true)
-        {
-            crate::plugins::kihon_plugin::dependencies::fetch_jmdict_simplified(
-                &jmdict_simplified_path,
-            )?;
-        }
+
+        change_progress(
+            &progress,
+            "Parsing dictionary data. \nThis may take a few minutes.",
+        );
         let file: File = File::open(jmdict_simplified_path)?;
         let jmdict: JMDict = serde_json::from_reader(BufReader::new(file))?;
 
@@ -429,14 +533,7 @@ impl Dictionary {
             .join("popup_dictionary")
             .join("dicts")
             .join("leeds-corpus-frequency.txt");
-        if !leeds_frequency_path
-            .try_exists()
-            .is_ok_and(|verified| verified == true)
-        {
-            crate::plugins::kihon_plugin::dependencies::fetch_leeds_frequencies(
-                &leeds_frequency_path,
-            )?;
-        }
+
         let file: File = File::open(leeds_frequency_path)?;
 
         // note: prone to overflow?
@@ -460,14 +557,6 @@ impl Dictionary {
             .join("popup_dictionary")
             .join("dicts")
             .join("jmdict-furigana.json");
-        if !jmdict_furigana_path
-            .try_exists()
-            .is_ok_and(|verified| verified == true)
-        {
-            crate::plugins::kihon_plugin::dependencies::fetch_jmdict_furigana(
-                &jmdict_furigana_path,
-            )?;
-        }
 
         let file: File = File::open(jmdict_furigana_path)?;
 
