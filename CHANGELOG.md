@@ -34,8 +34,9 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Core:** The default launch behaviour when no arguments are provided now
   includes `--keep-open` and `--at-mouse`.
 - **Core:** Lowered clipboard polling delay in watch mode to 100ms from 200ms (experimental).
-- **Kihon:** Dataset download is now multi-threaded and doesn't save the dataset
-  files to disk anymore, making it faster on most systems.
+- **Kihon:** Significantly improved performance of the Kihon database generation
+  via multi-threading and general code improvements. Dataset files are now
+  not saved to disk anymore.
 
 ### Deprecated
 

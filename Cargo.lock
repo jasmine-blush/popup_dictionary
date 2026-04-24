@@ -4382,6 +4382,7 @@ dependencies = [
  "ndarray",
  "ort",
  "phf",
+ "rayon",
  "regex",
  "reqwest",
  "serde",

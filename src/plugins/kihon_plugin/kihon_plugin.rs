@@ -16,7 +16,7 @@ use crate::plugin::change_progress;
 use crate::plugins::kihon_plugin::jmdict_dictionary::AltForm;
 use crate::plugins::kihon_plugin::jmdict_dictionary::DictionaryFurigana;
 use crate::plugins::kihon_plugin::jmdict_dictionary::{
-    Dictionary, DictionaryEntry, DictionaryTerm, Furigana,
+    Dictionary, DictionaryEntry, DictionaryTerm,
 };
 use crate::plugins::kihon_plugin::jumandic_tokenizer::tokenize;
 

@@ -1,17 +1,41 @@
 use ahash::AHashMap;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 use crate::plugin::change_progress;
 
 #[derive(Clone)]
 pub struct Dictionary {
     db: Db,
+}
+
+#[derive(Hash, PartialEq, Eq)]
+pub enum DictionaryKey {
+    Term(String),
+    Reading(String),
+}
+impl DictionaryKey {
+    pub fn serialize(&self) -> Vec<u8> {
+        match self {
+            DictionaryKey::Term(s) => {
+                let mut buf = Vec::with_capacity(s.len() + 1);
+                buf.push(0);
+                buf.extend_from_slice(s.as_bytes());
+                buf
+            }
+            DictionaryKey::Reading(s) => {
+                let mut buf = Vec::with_capacity(s.len() + 1);
+                buf.push(1);
+                buf.extend_from_slice(s.as_bytes());
+                buf
+            }
+        }
+    }
 }
 
 #[derive(bincode::Encode, bincode::Decode, Debug)]
@@ -145,10 +169,9 @@ impl Dictionary {
         progress: &'b Arc<Mutex<String>>,
     ) -> Result<&'a Db, Box<dyn Error>> {
         tracing::info!("Trying to populate database for Kihon plugin.");
-        let start: Instant = Instant::now();
 
         let dependencies = Self::fetch_dependencies(progress)?;
-        Self::parse_jmdict_simplified(&db, dependencies, progress, start)?;
+        Self::parse_jmdict_simplified(&db, dependencies, progress)?;
         db.insert(DB_VERSION_FLAG, "")?;
         db.flush()?;
 
@@ -265,78 +288,65 @@ impl Dictionary {
         db: &Db,
         dependencies: Dependencies,
         progress: &Arc<Mutex<String>>,
-        start: Instant,
     ) -> Result<(), Box<dyn Error>> {
-        let start_leeds: Instant = Instant::now();
         change_progress(
             &progress,
             "Parsing frequency data. \nThis may take a few minutes.",
         );
         let frequency_map: AHashMap<&str, usize> =
             Self::parse_leeds_frequencies(&dependencies.leeds)?;
-        let leeds_duration = start_leeds.elapsed();
-        let start_furigana: Instant = Instant::now();
         change_progress(
             &progress,
             "Parsing furigana data. \nThis may take a few minutes.",
         );
         let furigana_map: AHashMap<(&str, &str), Vec<Furigana>> =
             Self::parse_jmdict_furigana(&dependencies.furigana)?;
-        let furigana_duration = start_furigana.elapsed();
 
-        let start_simple: Instant = Instant::now();
         change_progress(
             &progress,
             "Parsing dictionary data. \nThis may take a few minutes.",
         );
         let jmdict: JMDict = serde_json::from_str(&dependencies.simplified)?;
-        let simple_duration: Duration = start_simple.elapsed();
-        println!(
-            "Parsed in... leeds: {:.3} ms, furigana: {:.3} ms, simple: {:.3} ms",
-            leeds_duration.as_secs_f64() * 1000.0,
-            furigana_duration.as_secs_f64() * 1000.0,
-            simple_duration.as_secs_f64() * 1000.0
-        );
-        let duration: Duration = start.elapsed();
-        println!(
-            "Fetched and parsed all in: {:.3} ms",
-            duration.as_secs_f64() * 1000.0
-        );
 
-        let start_db: Instant = Instant::now();
         change_progress(
             &progress,
             "Generating dictionary database. \nThis may take a few minutes.",
         );
 
-        let mut insert_durations: f64 = 0.0;
+        //TODO: build db_entries with rayon here
+        let mut db_entries: AHashMap<DictionaryKey, DictionaryEntry> =
+            AHashMap::with_capacity(460000); // 455399
         let wildcard: String = String::from("*");
         for word in &jmdict.words {
-            let mut entries: Vec<(String, DictionaryTerm)> = Vec::new();
+            let mut terms: Vec<(DictionaryKey, DictionaryTerm)> = Vec::new();
 
-            let current_id: String = word.id.to_string();
             if !word.kanji.is_empty() {
                 for kanji in &word.kanji {
+                    let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
+                        &word
+                            .sense
+                            .iter()
+                            .filter(|sense| {
+                                sense.applies_to_kanji.contains(&wildcard)
+                                    || sense.applies_to_kanji.contains(&kanji.text)
+                            })
+                            .collect::<Vec<&Sense>>(),
+                        &jmdict.tags,
+                    );
+
                     for kana in word.kana.iter().filter(|kana| {
                         kana.applies_to_kanji.contains(&wildcard)
                             || kana.applies_to_kanji.contains(&kanji.text)
                     }) {
-                        let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
-                            &word
-                                .sense
-                                .iter()
-                                .filter(|sense| {
-                                    sense.applies_to_kanji.contains(&wildcard)
-                                        || sense.applies_to_kanji.contains(&kanji.text)
-                                })
-                                .collect::<Vec<&Sense>>(),
-                            &jmdict.tags,
-                        );
+                        let id = word.id.clone();
 
-                        let mut frequency = frequency_map.get(&kanji.text.as_str());
-                        if frequency.is_none() {
-                            frequency = frequency_map.get(&kana.text.as_str());
-                        }
+                        let frequency_kanji = frequency_map.get(&kanji.text.as_str());
+                        let frequency_kana = frequency_map.get(&kana.text.as_str());
+                        let frequency = frequency_kanji.or(frequency_kana).cloned();
+
+                        let common = kanji.common.clone();
+                        let term = kanji.text.clone();
+                        let reading = kana.text.clone();
 
                         let furigana = furigana_map
                             .get(&(kanji.text.as_str(), kana.text.as_str()))
@@ -349,47 +359,33 @@ impl Dictionary {
                                     .collect::<Vec<DictionaryFurigana>>()
                             });
 
-                        entries.push((
-                            format!("term:{}", kanji.text),
+                        terms.push((
+                            DictionaryKey::Term(kanji.text.clone()),
                             DictionaryTerm {
-                                id: current_id.clone(),
-                                frequency: frequency.clone().map(|f| f.clone()),
-                                common: kanji.common.clone(),
-                                term: kanji.text.clone(),
-                                reading: kana.text.clone(),
+                                id: id.clone(),
+                                frequency,
+                                common,
+                                term: term.clone(),
+                                reading: reading.clone(),
                                 alt_forms: Vec::new(),
-                                furigana,
+                                furigana: furigana.clone(),
                                 meanings: meanings.clone(),
                             },
                         ));
 
-                        let mut frequency = frequency_map.get(&kana.text.as_str());
-                        if frequency.is_none() {
-                            frequency = frequency_map.get(&kanji.text.as_str());
-                        }
+                        let frequency = frequency_kana.or(frequency_kanji).cloned();
+                        let common = kana.common.clone();
 
-                        let furigana = furigana_map
-                            .get(&(kanji.text.as_str(), kana.text.as_str()))
-                            .map(|f| {
-                                f.iter()
-                                    .map(|furigana| DictionaryFurigana {
-                                        ruby: furigana.ruby.to_string(),
-                                        rt: furigana.rt.map(|s| s.to_string()),
-                                    })
-                                    .collect::<Vec<DictionaryFurigana>>()
-                            });
-
-                        entries.push((
-                            format!("reading:{}", kana.text),
+                        terms.push((
+                            DictionaryKey::Reading(kana.text.clone()),
                             DictionaryTerm {
-                                id: current_id.clone(),
-                                frequency: frequency.clone().map(|f| f.clone()),
-                                common: kana.common.clone(),
-                                term: kanji.text.clone(),
-                                reading: kana.text.clone(),
+                                id,
+                                frequency,
+                                common,
+                                term,
+                                reading,
                                 alt_forms: Vec::new(),
                                 furigana,
-
                                 meanings: meanings.clone(),
                             },
                         ));
@@ -401,6 +397,12 @@ impl Dictionary {
                     .iter()
                     .filter(|kana| kana.applies_to_kanji.is_empty())
                 {
+                    let id = word.id.clone();
+                    let frequency = frequency_map.get(&kana.text.as_str()).cloned();
+                    let common = kana.common.clone();
+
+                    let reading = kana.text.clone();
+
                     let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
                         &word
                             .sense
@@ -413,29 +415,33 @@ impl Dictionary {
                         &jmdict.tags,
                     );
 
-                    entries.push((
-                        format!("reading:{}", kana.text),
+                    terms.push((
+                        DictionaryKey::Reading(kana.text.clone()),
                         DictionaryTerm {
-                            id: current_id.clone(),
-                            frequency: frequency_map
-                                .get(&kana.text.as_str())
-                                .clone()
-                                .map(|f| f.clone()),
-                            common: kana.common.clone(),
+                            id,
+                            frequency,
+                            common,
                             term: String::new(),
-                            reading: kana.text.clone(),
+                            reading,
                             alt_forms: Vec::new(),
                             furigana: None,
-                            meanings: meanings.clone(),
+                            meanings,
                         },
                     ));
                 }
 
-                for (i, (key, entry)) in entries.iter().enumerate() {
+                for i in 0..terms.len() {
                     let mut alt_forms: Vec<AltForm> = Vec::new();
-                    for (j, (_, comp)) in entries.iter().enumerate() {
+                    for j in 0..terms.len() {
+                        if i == j {
+                            continue;
+                        }
+
+                        let entry = &terms[i].1;
+                        let comp = &terms[j].1;
+
                         //TODO: also check kanji and kana tags
-                        if i != j && entry.meanings == comp.meanings {
+                        if entry.meanings == comp.meanings {
                             if entry.term != comp.term || entry.reading != comp.reading {
                                 let alt_form: AltForm = AltForm {
                                     term: comp.term.clone(),
@@ -449,23 +455,24 @@ impl Dictionary {
                         }
                     }
 
-                    let start_insert: Instant = Instant::now();
-                    Self::insert_entry(
-                        db,
-                        key,
-                        &current_id,
-                        &entry.frequency.as_ref(),
-                        &entry.common,
-                        &entry.term,
-                        &entry.reading,
-                        &alt_forms,
-                        &entry.furigana,
-                        &entry.meanings,
-                    )?;
-                    insert_durations += start_insert.elapsed().as_secs_f64();
+                    terms[i].1.alt_forms = alt_forms;
+                }
+
+                for (key, term) in terms.drain(..) {
+                    db_entries
+                        .entry(key)
+                        .or_insert_with(|| DictionaryEntry { terms: Vec::new() })
+                        .terms
+                        .push(term);
                 }
             } else {
                 for kana in &word.kana {
+                    let id = word.id.clone();
+                    let frequency = frequency_map.get(&kana.text.as_str()).cloned();
+                    let common = kana.common.clone();
+
+                    let reading = kana.text.clone();
+
                     let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
                         &word
                             .sense
@@ -478,29 +485,34 @@ impl Dictionary {
                         &jmdict.tags,
                     );
 
-                    entries.push((
-                        format!("reading:{}", kana.text),
+                    terms.push((
+                        DictionaryKey::Reading(kana.text.clone()),
                         DictionaryTerm {
-                            id: current_id.clone(),
-                            frequency: frequency_map
-                                .get(&kana.text.as_str())
-                                .clone()
-                                .map(|f| f.clone()),
-                            common: kana.common.clone(),
+                            id,
+                            frequency,
+                            common,
                             term: String::new(),
-                            reading: kana.text.clone(),
+                            reading,
                             alt_forms: Vec::new(),
                             furigana: None,
-                            meanings: meanings.clone(),
+                            meanings,
                         },
                     ));
                 }
 
-                for (i, (key, entry)) in entries.iter().enumerate() {
+                let len = terms.len();
+                for i in 0..len {
                     let mut alt_forms: Vec<AltForm> = Vec::new();
-                    for (j, (_, comp)) in entries.iter().enumerate() {
+                    for j in 0..len {
+                        if i == j {
+                            continue;
+                        }
+
+                        let entry = &terms[i].1;
+                        let comp = &terms[j].1;
+
                         //TODO: also check kana tags
-                        if i != j && entry.meanings == comp.meanings {
+                        if entry.meanings == comp.meanings {
                             alt_forms.push(AltForm {
                                 term: comp.term.clone(),
                                 reading: comp.reading.clone(),
@@ -509,32 +521,36 @@ impl Dictionary {
                         }
                     }
 
-                    let start_insert: Instant = Instant::now();
-                    Self::insert_entry(
-                        db,
-                        key,
-                        &current_id,
-                        &entry.frequency.as_ref(),
-                        &entry.common,
-                        &entry.term,
-                        &entry.reading,
-                        &alt_forms,
-                        &entry.furigana,
-                        &entry.meanings,
-                    )?;
-                    insert_durations += start_insert.elapsed().as_secs_f64();
+                    terms[i].1.alt_forms = alt_forms;
+                }
+
+                for (key, term) in terms.drain(..) {
+                    db_entries
+                        .entry(key)
+                        .or_insert_with(|| DictionaryEntry { terms: Vec::new() })
+                        .terms
+                        .push(term);
                 }
             }
         }
 
-        let db_duration: Duration = start_db.elapsed();
-        println!(
-            "Generated db in: {:.3} ms, inserts: {:.3} ms",
-            db_duration.as_secs_f64() * 1000.0,
-            insert_durations * 1000.0
-        );
+        let entries_vec: Vec<(DictionaryKey, DictionaryEntry)> = db_entries.into_iter().collect();
+        entries_vec.into_par_iter().chunks(2000).for_each(|chunk| {
+            let mut batch = sled::Batch::default();
 
-        db.flush()?;
+            for (key, mut entry) in chunk {
+                entry.terms.sort_unstable_by(|a, b| {
+                    b.common
+                        .cmp(&a.common)
+                        .then_with(|| a.frequency.cmp(&b.frequency))
+                });
+                let serialized_entry: Vec<u8> =
+                    bincode::encode_to_vec(&entry, bincode::config::standard()).unwrap();
+                batch.insert(key.serialize(), serialized_entry);
+            }
+
+            db.apply_batch(batch).unwrap();
+        });
 
         Ok(())
     }
@@ -554,31 +570,16 @@ impl Dictionary {
     fn parse_jmdict_furigana(
         furigana_string: &str,
     ) -> Result<AHashMap<(&str, &str), Vec<Furigana<'_>>>, Box<dyn Error>> {
-        let start: Instant = Instant::now();
-
         let json_string_safe = furigana_string
             .strip_prefix('\u{FEFF}')
             .unwrap_or(&furigana_string);
-        let parse: Instant = Instant::now();
         let json: Vec<JMDictFurigana> = serde_json::from_str(json_string_safe)?;
-        let duration: Duration = start.elapsed();
-        let since_parse: Duration = parse.elapsed();
-        println!(
-            "Deserialized in: {:.3} ms, Parse: {:.3} ms",
-            duration.as_secs_f64() * 1000.0,
-            since_parse.as_secs_f64() * 1000.0
-        );
-
-        let start: Instant = Instant::now();
 
         let mut furigana_map: AHashMap<(&str, &str), Vec<Furigana>> =
             AHashMap::with_capacity(json.len());
         for item in json {
             furigana_map.insert((item.text, item.reading), item.furigana);
         }
-        let duration: Duration = start.elapsed();
-        println!("Mapped in: {:.3} ms", duration.as_secs_f64() * 1000.0);
-        println!("Entires: {}", furigana_map.len());
 
         Ok(furigana_map)
     }
@@ -625,6 +626,7 @@ impl Dictionary {
         meanings
     }
 
+    /*
     fn insert_entry(
         db: &Db,
         key: &str,
@@ -750,16 +752,22 @@ impl Dictionary {
         }
 
         Ok(())
-    }
+    }*/
 
     pub fn lookup(&self, word: &str) -> Result<Option<DictionaryEntry>, Box<dyn Error>> {
-        if let Some(serialized_entry) = self.db.get(format!("term:{}", word))? {
+        if let Some(serialized_entry) = self
+            .db
+            .get(DictionaryKey::Term(word.to_owned()).serialize())?
+        {
             let (entry, _): (DictionaryEntry, usize) =
                 bincode::decode_from_slice(&serialized_entry, bincode::config::standard())
                     .expect(&format!("{:?}", &serialized_entry));
             return Ok(Some(entry));
         }
-        if let Some(serialized_entry) = self.db.get(format!("reading:{}", word))? {
+        if let Some(serialized_entry) = self
+            .db
+            .get(DictionaryKey::Reading(word.to_owned()).serialize())?
+        {
             let (entry, _): (DictionaryEntry, usize) =
                 bincode::decode_from_slice(&serialized_entry, bincode::config::standard())
                     .expect("reading");
