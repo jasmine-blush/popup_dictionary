@@ -33,11 +33,12 @@ fn open_app(
     sentence: &str,
     config: app::Config,
     new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
+    paused: Option<Arc<AtomicBool>>,
 ) -> Result<(), Box<dyn Error>> {
     let valid_sentence: String = validate_sentence(&sentence)?;
 
     tracing::info!("Input looks good. Launching dictionary app.");
-    run_app(&valid_sentence, config, new_sentence_mutex)?;
+    run_app(&valid_sentence, config, new_sentence_mutex, paused)?;
 
     Ok(())
 }
@@ -74,7 +75,7 @@ fn contains_japanese(text: &str) -> bool {
 }
 
 pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
-    open_app(&sentence, config, None)?;
+    open_app(&sentence, config, None, None)?;
 
     Ok(())
 }
@@ -284,6 +285,7 @@ pub fn watch(
                         &first_sentence,
                         config.clone(),
                         Some(Arc::clone(&new_sentence_channel)),
+                        Some(Arc::clone(&paused)),
                     ) {
                         tracing::warn!(
                             "Failed while running in keep-open watch mode due to error: {e}"

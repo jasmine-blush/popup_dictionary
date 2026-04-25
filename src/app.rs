@@ -1,6 +1,9 @@
 use eframe::{NativeOptions, egui};
 use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 use crate::plugin::{Plugin, Plugins, Token};
 
@@ -35,6 +38,7 @@ pub fn run_app(
     sentence: &str,
     config: Config,
     new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
+    paused: Option<Arc<AtomicBool>>,
 ) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
     let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
@@ -124,6 +128,7 @@ pub fn run_app(
                 is_hyprland,
                 sentence,
                 new_sentence_mutex,
+                paused,
             )))
         }),
     )
@@ -151,6 +156,7 @@ pub struct MyApp {
     edit_mode: bool,
     was_edited: bool,
     new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
+    paused: Option<Arc<AtomicBool>>,
 }
 
 impl MyApp {
@@ -161,6 +167,7 @@ impl MyApp {
         #[cfg(feature = "hyprland-support")] is_hyprland: bool,
         sentence: &str,
         new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
+        paused: Option<Arc<AtomicBool>>,
     ) -> Self {
         crate::font_helper::load_main_font(&cc.egui_ctx, &config.font);
 
@@ -190,6 +197,7 @@ impl MyApp {
             edit_mode: false,
             was_edited: false,
             new_sentence_mutex,
+            paused,
         };
 
         app.try_load_plugin(init_plugin_idx, false);
@@ -780,6 +788,38 @@ impl eframe::App for MyApp {
                                     &(*self.plugin_state.lock().unwrap())
                                 {
                                     plugin.open(ctx);
+                                }
+                            }
+
+                            // pause button if in keep-open watch mode
+                            if let Some(paused) = &self.paused {
+                                let is_paused = paused.load(Ordering::Relaxed);
+                                if is_paused {
+                                    if ui
+                                        .add(egui::Button::new(
+                                            RichText::new("\u{25b6}").size(SMALL_TEXT_SIZE),
+                                        ))
+                                        .on_hover_text(
+                                            RichText::new("Resume watcher").size(TINY_TEXT_SIZE),
+                                        )
+                                        .clicked()
+                                    {
+                                        tracing::info!("Resuming watcher.");
+                                        paused.store(false, Ordering::Relaxed);
+                                    }
+                                } else {
+                                    if ui
+                                        .add(egui::Button::new(
+                                            RichText::new("\u{23f8}").size(SMALL_TEXT_SIZE),
+                                        ))
+                                        .on_hover_text(
+                                            RichText::new("Pause watcher").size(TINY_TEXT_SIZE),
+                                        )
+                                        .clicked()
+                                    {
+                                        tracing::info!("Pausing watcher.");
+                                        paused.store(true, Ordering::Relaxed);
+                                    }
                                 }
                             }
                         });

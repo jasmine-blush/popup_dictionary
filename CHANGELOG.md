@@ -20,6 +20,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **CLI:** A `--keep-open` argument which updates the app with new inputs from
   the clipboard in watch mode even while the window is already/still open.
 - **UI:** Plugins can now display helpful status information while loading.
+- **UI:** A pause button inside the UI when the new `--keep-open` option is set.
 
 ### Changed
 
