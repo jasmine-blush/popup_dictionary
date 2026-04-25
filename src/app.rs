@@ -594,6 +594,34 @@ impl eframe::App for MyApp {
                                     |ui| {
                                         if ui
                                             .add(egui::Button::new(
+                                                RichText::new("\u{1f4cb}").size(TINY_TEXT_SIZE),
+                                            ))
+                                            .on_hover_text(
+                                                RichText::new("Copy input to clipboard")
+                                                    .size(TINY_TEXT_SIZE),
+                                            )
+                                            .clicked()
+                                        {
+                                            // Copy button
+                                            let sentence: String = self.sentence.to_owned();
+                                            std::thread::spawn(|| {
+                                                tracing::debug!(
+                                                    "Trying to copy input text to clipboard."
+                                                );
+                                                let mut clipboard: arboard::Clipboard =
+                                                    arboard::Clipboard::new().unwrap();
+                                                clipboard.set_text(sentence).unwrap();
+                                                std::thread::sleep(std::time::Duration::from_secs(
+                                                    1,
+                                                ));
+                                                drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
+                                                tracing::debug!(
+                                                    "Successfully copied input text to clipboard."
+                                                );
+                                            });
+                                        }
+                                        if ui
+                                            .add(egui::Button::new(
                                                 RichText::new("\u{1F504}").size(TINY_TEXT_SIZE),
                                             ))
                                             .on_hover_text(
@@ -757,27 +785,7 @@ impl eframe::App for MyApp {
                             {
                                 // Settings button
                             }
-                            if ui
-                                .add(egui::Button::new(
-                                    RichText::new("\u{1f4cb}").size(SMALL_TEXT_SIZE),
-                                ))
-                                .on_hover_text(
-                                    RichText::new("Copy input to clipboard").size(TINY_TEXT_SIZE),
-                                )
-                                .clicked()
-                            {
-                                // Copy button
-                                let sentence: String = self.sentence.to_owned();
-                                std::thread::spawn(|| {
-                                    tracing::debug!("Trying to copy input text to clipboard.");
-                                    let mut clipboard: arboard::Clipboard =
-                                        arboard::Clipboard::new().unwrap();
-                                    clipboard.set_text(sentence).unwrap();
-                                    std::thread::sleep(std::time::Duration::from_secs(1));
-                                    drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
-                                    tracing::debug!("Successfully copied input text to clipboard.");
-                                });
-                            }
+
                             if ui
                                 .add(egui::Button::new(RichText::new("ℹ").size(SMALL_TEXT_SIZE)))
                                 .on_hover_text(RichText::new("Open in Web").size(TINY_TEXT_SIZE))

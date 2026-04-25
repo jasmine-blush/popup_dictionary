@@ -38,6 +38,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Kihon:** Significantly improved performance of the Kihon database generation
   via multi-threading and general code improvements. Dataset files are now
   not saved to disk anymore.
+- **UI:** Moved the copy input button to the input bar at the top of the UI.
 
 ### Deprecated
 
