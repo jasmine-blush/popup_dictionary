@@ -787,7 +787,9 @@ impl eframe::App for MyApp {
                             }
 
                             if ui
-                                .add(egui::Button::new(RichText::new("ℹ").size(SMALL_TEXT_SIZE)))
+                                .add(egui::Button::new(
+                                    RichText::new("\u{1f310}").size(SMALL_TEXT_SIZE),
+                                ))
                                 .on_hover_text(RichText::new("Open in Web").size(TINY_TEXT_SIZE))
                                 .clicked()
                             {

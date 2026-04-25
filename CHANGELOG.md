@@ -39,6 +39,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   via multi-threading and general code improvements. Dataset files are now
   not saved to disk anymore.
 - **UI:** Moved the copy input button to the input bar at the top of the UI.
+- **UI:** The open in web button now uses a globe symbol (from an i symbol).
 
 ### Deprecated
 
