@@ -21,6 +21,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   the clipboard in watch mode even while the window is already/still open.
 - **UI:** Plugins can now display helpful status information while loading.
 - **UI:** A pause button inside the UI when the new `--keep-open` option is set.
+- **Kihon:** BCCWJ as the primary frequency dataset (replacing the leeds corpus).
+- **Kihon:** Frequencies (currently BCCWJ) are now shown for each definition term.
 
 ### Changed
 
@@ -40,6 +42,11 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   not saved to disk anymore.
 - **UI:** Moved the copy input button to the input bar at the top of the UI.
 - **UI:** The open in web button now uses a globe symbol (from an i symbol).
+- **Kihon:** Definition terms are now sorted much more naturally using
+  their frequencies, terms that match the input word are displayed at the top.
+- **Kihon:** Definition terms now display their most frequently used form
+  (kanji/kana) as the main term. In cases where the main term differs from the
+  input word but one of the "Other forms" matches it, that form is underlined.
 
 ### Deprecated
 

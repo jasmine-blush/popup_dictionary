@@ -138,13 +138,29 @@ pub struct Furigana<'a> {
 }
 // ---
 
+// bccwj-combined json
+type BCCWJEntry<'b> = (&'b str, &'b str, BCCWJData<'b>); // [term, "freq", {"reading": "reading", "frequency": 0}]
+
+#[derive(Serialize, Deserialize, Debug)]
+struct BCCWJData<'b> {
+    reading: &'b str,
+    frequency: usize,
+}
+// ---
+
 struct Dependencies {
-    leeds: String,
+    bccwj: String,
     furigana: String,
     simplified: String,
 }
 
-const DB_VERSION_FLAG: &str = "db_version_001";
+#[derive(Hash, PartialEq, Eq)]
+struct FrequencyKey<'c> {
+    term: &'c str,
+    reading: &'c str,
+}
+
+const DB_VERSION_FLAG: &str = "db_version_002";
 
 impl Dictionary {
     pub fn load_dictionary(
@@ -238,6 +254,13 @@ impl Dictionary {
             crate::plugins::kihon_plugin::dependencies::get_jmdict_simplified().unwrap()
         });
 
+        // term_meta_bank_1.json
+        let bccwj_frequency_handle = std::thread::spawn(|| {
+            tracing::debug!("Downloading bccwj-combined.");
+
+            crate::plugins::kihon_plugin::dependencies::get_bccwj_combined().unwrap()
+        });
+
         // jmdict-furigana.json
         let jmdict_furigana_handle = std::thread::spawn(|| {
             tracing::debug!("Downloading jmdict-furigana.");
@@ -245,29 +268,22 @@ impl Dictionary {
             crate::plugins::kihon_plugin::dependencies::get_jmdict_furigana().unwrap()
         });
 
-        // leeds-corpus-frequency.txt
-        let leeds_frequency_handle = std::thread::spawn(|| {
-            tracing::debug!("Downloading leeds-corpus-frequency.");
-
-            crate::plugins::kihon_plugin::dependencies::get_leeds_frequencies().unwrap()
-        });
-
         change_progress(
             progress,
             "Downloading datasets [1/3]. \nThis may take a few minutes.",
-        );
-        let leeds_frequency = leeds_frequency_handle
-            .join()
-            .map_err(|e| format!("Could not download leeds-corpus-frequency: {:?}", e))?;
-        tracing::debug!("leeds-corpus-frequency successfully downloaded.");
-        change_progress(
-            progress,
-            "Downloading datasets [2/3]. \nThis may take a few minutes.",
         );
         let jmdict_furigana = jmdict_furigana_handle
             .join()
             .map_err(|e| format!("Could not download jmdict-furigan: {:?}", e))?;
         tracing::debug!("jmdict-furigana successfully downloaded.");
+        change_progress(
+            progress,
+            "Downloading datasets [2/3]. \nThis may take a few minutes.",
+        );
+        let bccwj_frequency = bccwj_frequency_handle
+            .join()
+            .map_err(|e| format!("Could not download bccwj-combined: {:?}", e))?;
+        tracing::debug!("bccwj-combined successfully downloaded.");
         change_progress(
             progress,
             "Downloading datasets [3/3]. \nThis may take a few minutes.",
@@ -278,7 +294,7 @@ impl Dictionary {
         tracing::debug!("jmdict-simplified successfully downloaded.");
 
         Ok(Dependencies {
-            leeds: leeds_frequency,
+            bccwj: bccwj_frequency,
             furigana: jmdict_furigana,
             simplified: jmdict_simplified,
         })
@@ -293,8 +309,8 @@ impl Dictionary {
             &progress,
             "Parsing frequency data. \nThis may take a few minutes.",
         );
-        let frequency_map: AHashMap<&str, usize> =
-            Self::parse_leeds_frequencies(&dependencies.leeds)?;
+        let bccwj_frequency_map: AHashMap<FrequencyKey, usize> =
+            Self::parse_bccwj_frequencies(&dependencies.bccwj)?;
         change_progress(
             &progress,
             "Parsing furigana data. \nThis may take a few minutes.",
@@ -340,9 +356,15 @@ impl Dictionary {
                     }) {
                         let id = word.id.clone();
 
+                        /*
                         let frequency_kanji = frequency_map.get(&kanji.text.as_str());
                         let frequency_kana = frequency_map.get(&kana.text.as_str());
-                        let frequency = frequency_kanji.or(frequency_kana).cloned();
+                        let frequency = frequency_kanji.or(frequency_kana).cloned();*/
+                        let frequency_key = FrequencyKey {
+                            term: &kanji.text.as_str(),
+                            reading: &kana.text.as_str(),
+                        };
+                        let mut frequency = bccwj_frequency_map.get(&frequency_key);
 
                         let common = kanji.common.clone();
                         let term = kanji.text.clone();
@@ -363,7 +385,7 @@ impl Dictionary {
                             DictionaryKey::Term(kanji.text.clone()),
                             DictionaryTerm {
                                 id: id.clone(),
-                                frequency,
+                                frequency: frequency.cloned(),
                                 common,
                                 term: term.clone(),
                                 reading: reading.clone(),
@@ -373,14 +395,14 @@ impl Dictionary {
                             },
                         ));
 
-                        let frequency = frequency_kana.or(frequency_kanji).cloned();
+                        //let frequency = frequency_kana.or(frequency_kanji).cloned();
                         let common = kana.common.clone();
 
                         terms.push((
                             DictionaryKey::Reading(kana.text.clone()),
                             DictionaryTerm {
                                 id,
-                                frequency,
+                                frequency: frequency.cloned(),
                                 common,
                                 term,
                                 reading,
@@ -398,7 +420,12 @@ impl Dictionary {
                     .filter(|kana| kana.applies_to_kanji.is_empty())
                 {
                     let id = word.id.clone();
-                    let frequency = frequency_map.get(&kana.text.as_str()).cloned();
+                    //let frequency = frequency_map.get(&kana.text.as_str()).cloned();
+                    let frequency_key = FrequencyKey {
+                        term: &kana.text.as_str(),
+                        reading: &kana.text.as_str(),
+                    };
+                    let frequency = bccwj_frequency_map.get(&frequency_key);
                     let common = kana.common.clone();
 
                     let reading = kana.text.clone();
@@ -419,7 +446,7 @@ impl Dictionary {
                         DictionaryKey::Reading(kana.text.clone()),
                         DictionaryTerm {
                             id,
-                            frequency,
+                            frequency: frequency.cloned(),
                             common,
                             term: String::new(),
                             reading,
@@ -468,7 +495,12 @@ impl Dictionary {
             } else {
                 for kana in &word.kana {
                     let id = word.id.clone();
-                    let frequency = frequency_map.get(&kana.text.as_str()).cloned();
+                    //let frequency = frequency_map.get(&kana.text.as_str()).cloned();
+                    let frequency_key = FrequencyKey {
+                        term: &kana.text.as_str(),
+                        reading: &kana.text.as_str(),
+                    };
+                    let frequency = bccwj_frequency_map.get(&frequency_key);
                     let common = kana.common.clone();
 
                     let reading = kana.text.clone();
@@ -489,7 +521,7 @@ impl Dictionary {
                         DictionaryKey::Reading(kana.text.clone()),
                         DictionaryTerm {
                             id,
-                            frequency,
+                            frequency: frequency.cloned(),
                             common,
                             term: String::new(),
                             reading,
@@ -563,6 +595,36 @@ impl Dictionary {
             .enumerate()
             .map(|(i, l)| (l, i))
             .collect();
+
+        Ok(frequency_map)
+    }
+
+    fn parse_bccwj_frequencies(
+        bccwj_string: &str,
+    ) -> Result<AHashMap<FrequencyKey<'_>, usize>, Box<dyn Error>> {
+        let json: Vec<BCCWJEntry> = serde_json::from_str(bccwj_string)?;
+
+        let mut frequency_map: AHashMap<FrequencyKey, usize> = AHashMap::with_capacity(json.len());
+        for item in json {
+            frequency_map
+                .entry(FrequencyKey {
+                    term: item.0,
+                    reading: item.2.reading,
+                })
+                .and_modify(|e| {
+                    *e = (*e).min(item.2.frequency);
+                })
+                .or_insert(item.2.frequency);
+        }
+
+        // special frequency for 乃「の」to prioritize even when written as kana
+        frequency_map.insert(
+            FrequencyKey {
+                term: "乃",
+                reading: "の",
+            },
+            1,
+        );
 
         Ok(frequency_map)
     }

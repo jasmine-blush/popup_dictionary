@@ -6,6 +6,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::usize;
 
 use crate::app;
 use crate::app::MyApp;
@@ -108,12 +109,19 @@ impl Plugin for KihonPlugin {
                 .show(ui, |ui| {
                     /*
                     Lookup in database in this order until exists:
-                    1. base                                     -- first
-                    2. surface
+                    1. surface                                     -- first
+                    2. base
                     3. base minus last letter (e.g. 素敵な)
                     4. surface minus last letter                -- last
                     */
-                    if let Some(dictionary_entry) = self
+                    if let Some(dictionary_entry) =
+                        self.dictionary.lookup(&token.input_word).expect(&format!(
+                            "Error getting from database when looking up surface: {}",
+                            &token.input_word
+                        ))
+                    {
+                        self.display_terms_prioritized(ui, &token.input_word, &dictionary_entry);
+                    } else if let Some(dictionary_entry) = self
                         .dictionary
                         .lookup(&token.deinflected_word)
                         .expect(&format!(
@@ -121,14 +129,11 @@ impl Plugin for KihonPlugin {
                             &token.deinflected_word
                         ))
                     {
-                        self.display_terms_prioritized(ui, token, &dictionary_entry);
-                    } else if let Some(dictionary_entry) =
-                        self.dictionary.lookup(&token.input_word).expect(&format!(
-                            "Error getting from database when looking up surface: {}",
-                            &token.input_word
-                        ))
-                    {
-                        self.display_terms_prioritized(ui, token, &dictionary_entry);
+                        self.display_terms_prioritized(
+                            ui,
+                            &token.deinflected_word,
+                            &dictionary_entry,
+                        );
                     } else {
                         let mut base_minus_one: String = token.deinflected_word.clone();
                         _ = base_minus_one.pop();
@@ -138,7 +143,7 @@ impl Plugin for KihonPlugin {
                                 &base_minus_one
                             ))
                         {
-                            self.display_terms_prioritized(ui, token, &dictionary_entry);
+                            self.display_terms_prioritized(ui, &base_minus_one, &dictionary_entry);
                         } else {
                             let mut surface_minus_one: String = token.input_word.clone();
                             _ = surface_minus_one.pop();
@@ -148,7 +153,11 @@ impl Plugin for KihonPlugin {
                                     &surface_minus_one
                                 ))
                             {
-                                self.display_terms_prioritized(ui, token, &dictionary_entry);
+                                self.display_terms_prioritized(
+                                    ui,
+                                    &surface_minus_one,
+                                    &dictionary_entry,
+                                );
                             }
                         }
                     }
@@ -172,83 +181,150 @@ impl Plugin for KihonPlugin {
 }
 
 impl KihonPlugin {
-    fn display_terms_prioritized(&self, ui: &mut Ui, token: &Token, entry: &DictionaryEntry) {
-        /*
-        Display terms in this priority:
-        1. no kanji, same as surface        -- first
-        2. no kanji, same as base
-        3. has kanji, same as surface
-        4. has kanji, same as base
-        5. rest                             -- last
-        */
+    fn display_terms_prioritized(&self, ui: &mut Ui, token: &str, entry: &DictionaryEntry) {
+        let mut all_terms: Vec<DictionaryTerm> = entry.terms.clone();
+        let init_len: usize = all_terms.len();
+        for i in 0..init_len {
+            let curr_alt_forms = all_terms[i].alt_forms.clone();
+            for alt_form in curr_alt_forms {
+                if all_terms
+                    .iter()
+                    .find(|t| {
+                        t.term == alt_form.term
+                            && t.reading == alt_form.reading
+                            && t.furigana == alt_form.furigana
+                    })
+                    .is_none()
+                {
+                    let lookup_string = if alt_form.term.is_empty() {
+                        &alt_form.reading
+                    } else {
+                        &alt_form.term
+                    };
+                    if let Some(dictionary_entry) =
+                        self.dictionary.lookup(lookup_string).expect(&format!(
+                            "Error getting from database when looking up alt_form: {:?}, with: {}",
+                            alt_form, lookup_string
+                        ))
+                    {
+                        for term in dictionary_entry.terms {
+                            if term.term == alt_form.term
+                                && term.reading == alt_form.reading
+                                && term.furigana == alt_form.furigana
+                                && term.id == all_terms[i].id
+                            {
+                                all_terms.push(term);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-        let mut terms_to_display: Vec<DictionaryTerm> = entry.terms.clone();
         let mut filtered_terms: Vec<DictionaryTerm> = Vec::new();
-        terms_to_display.retain_mut(|term| {
-            if term.term.is_empty() && term.reading == token.input_word {
-                filtered_terms.push(term.clone());
-                false
+        for term in &all_terms {
+            if let Some((i, existing_term)) = filtered_terms.iter().enumerate().find(|(i, t)| {
+                let alt_form = AltForm {
+                    term: term.term.clone(),
+                    reading: term.reading.clone(),
+                    furigana: term.furigana.clone(),
+                };
+                t.alt_forms.contains(&alt_form) && t.id == term.id
+            }) {
+                if let Some(frequency) = term.frequency {
+                    if let Some(existing_frequency) = existing_term.frequency {
+                        if frequency < existing_frequency {
+                            filtered_terms[i] = term.clone();
+                        }
+                    } else {
+                        filtered_terms[i] = term.clone();
+                    }
+                } else {
+                    if existing_term.frequency.is_none() && term.common && !existing_term.common {
+                        filtered_terms[i] = term.clone();
+                    }
+                }
             } else {
-                true
-            }
-        });
-        Self::display_terms(ui, &filtered_terms);
-        filtered_terms.clear();
-        terms_to_display.retain_mut(|term| {
-            if term.term.is_empty() && term.reading == token.deinflected_word {
                 filtered_terms.push(term.clone());
-                false
-            } else {
-                true
             }
-        });
-        Self::display_terms(ui, &filtered_terms);
-        filtered_terms.clear();
-        terms_to_display.retain_mut(|term| {
-            if !term.term.is_empty() && term.reading == token.input_word {
-                filtered_terms.push(term.clone());
-                false
+        }
+
+        filtered_terms.sort_unstable_by(|a, b| {
+            let a_weighted_frequency = match a.frequency {
+                Some(frequency) => frequency,
+                None => {
+                    if a.common {
+                        usize::MAX - 1
+                    } else {
+                        usize::MAX
+                    }
+                }
+            };
+            let b_weighted_frequency = match b.frequency {
+                Some(frequency) => frequency,
+                None => {
+                    if b.common {
+                        usize::MAX - 1
+                    } else {
+                        usize::MAX
+                    }
+                }
+            };
+
+            if a.term == token {
+                if b.term == token {
+                    return a_weighted_frequency.cmp(&b_weighted_frequency);
+                } else {
+                    return 0.cmp(&1);
+                }
             } else {
-                true
+                if b.term == token {
+                    return 1.cmp(&0);
+                }
             }
-        });
-        Self::display_terms(ui, &filtered_terms);
-        filtered_terms.clear();
-        terms_to_display.retain_mut(|term| {
-            if !term.term.is_empty() && term.reading == token.deinflected_word {
-                filtered_terms.push(term.clone());
-                false
+
+            if a.term.is_empty() && a.reading == token {
+                if b.term.is_empty() && b.reading == token {
+                    return a_weighted_frequency.cmp(&b_weighted_frequency);
+                } else {
+                    return 0.cmp(&1);
+                }
             } else {
-                true
+                if b.term.is_empty() && b.reading == token {
+                    return 1.cmp(&0);
+                }
             }
+
+            if a.reading == token {
+                if b.reading == token {
+                    return a_weighted_frequency.cmp(&b_weighted_frequency);
+                } else {
+                    return 0.cmp(&1);
+                }
+            } else {
+                if b.reading == token {
+                    return 1.cmp(&0);
+                }
+            }
+
+            a_weighted_frequency.cmp(&b_weighted_frequency)
         });
-        Self::display_terms(ui, &filtered_terms);
-        Self::display_terms(ui, &terms_to_display);
+
+        Self::display_terms(ui, token, &filtered_terms);
     }
 
-    fn display_terms(ui: &mut Ui, terms: &Vec<DictionaryTerm>) {
-        let mut displayed_alt_forms: Vec<AltForm> = Vec::new(); // adding AltForms in here as they get
-        // displayed, checking every term for whether it was already displayed as an alt form in
-        // the past, if yes skip it.
+    fn display_terms(ui: &mut Ui, token: &str, terms: &Vec<DictionaryTerm>) {
         for (id, dictionary_term) in terms.iter().enumerate() {
-            let curr_form: AltForm = AltForm {
-                term: dictionary_term.term.clone(),
-                reading: dictionary_term.reading.clone(),
-                furigana: dictionary_term.furigana.clone(),
-            };
-            if displayed_alt_forms.contains(&curr_form) {
-                continue;
-            }
             ui.horizontal(|ui| {
                 if !dictionary_term.term.is_empty() {
                     if let Some(furigana_vec) = &dictionary_term.furigana {
-                        Self::display_furigana(ui, furigana_vec, 1.0);
+                        Self::display_furigana(ui, furigana_vec, 1.0, false);
                     } else {
                         let furigana: Vec<DictionaryFurigana> = vec![DictionaryFurigana {
                             ruby: dictionary_term.term.clone(),
                             rt: Some(dictionary_term.reading.clone()),
                         }];
-                        Self::display_furigana(ui, &furigana, 1.0);
+                        Self::display_furigana(ui, &furigana, 1.0, false);
                     }
                 } else {
                     ui.label(RichText::new(&dictionary_term.reading).heading());
@@ -284,6 +360,11 @@ impl KihonPlugin {
                     }
                 });
             });
+
+            if let Some(frequency) = dictionary_term.frequency {
+                Self::display_tag(ui, &format!("BCCWJ: {}", frequency));
+                ui.add_space(app::SPACING_SIZE);
+            }
 
             let mut count: u32 = 0;
             let mut last_tags: String = String::new();
@@ -342,7 +423,8 @@ impl KihonPlugin {
                         ui.label(
                             RichText::new("Other forms")
                                 .size(app::TINY_TEXT_SIZE * 0.8)
-                                .color(app::PRIMARY_TEXT_COLOR),
+                                .color(app::PRIMARY_TEXT_COLOR)
+                                .strong(),
                         );
                     });
                 });
@@ -366,15 +448,28 @@ impl KihonPlugin {
 
                                 for (i, form) in dictionary_term.alt_forms.iter().rev().enumerate()
                                 {
-                                    displayed_alt_forms.push(form.clone());
+                                    let is_match = !(!dictionary_term.term.is_empty()
+                                        && dictionary_term.term == form.term
+                                        || (dictionary_term.term.is_empty()
+                                            && dictionary_term.reading == form.reading))
+                                        && (form.term == token
+                                            || (form.term.is_empty() && form.reading == token));
                                     if let Some(furigana) = &form.furigana {
-                                        Self::display_furigana(ui, furigana, 0.8);
+                                        Self::display_furigana(ui, furigana, 0.8, is_match);
                                     } else {
                                         if form.term.is_empty() {
-                                            ui.label(
-                                                RichText::new(&form.reading)
-                                                    .size(app::BIG_TEXT_SIZE * 0.8)
-                                                    .color(app::PRIMARY_TEXT_COLOR),
+                                            let mut furigana_vec: Vec<DictionaryFurigana> =
+                                                Vec::new();
+                                            furigana_vec.push(DictionaryFurigana {
+                                                ruby: form.reading.clone(),
+                                                rt: None,
+                                            });
+
+                                            Self::display_furigana(
+                                                ui,
+                                                &furigana_vec,
+                                                0.8,
+                                                is_match,
                                             );
                                         } else {
                                             let mut furigana_vec: Vec<DictionaryFurigana> =
@@ -384,7 +479,12 @@ impl KihonPlugin {
                                                 rt: Some(form.reading.clone()),
                                             });
 
-                                            Self::display_furigana(ui, &furigana_vec, 0.8);
+                                            Self::display_furigana(
+                                                ui,
+                                                &furigana_vec,
+                                                0.8,
+                                                is_match,
+                                            );
                                         }
                                     }
                                     if i != dictionary_term.alt_forms.len() - 1 {
@@ -464,7 +564,12 @@ impl KihonPlugin {
         //ui.allocate_space(rect.size());
     }
 
-    fn display_furigana(ui: &mut Ui, furigana_vec: &Vec<DictionaryFurigana>, font_scale: f32) {
+    fn display_furigana(
+        ui: &mut Ui,
+        furigana_vec: &Vec<DictionaryFurigana>,
+        font_scale: f32,
+        is_selected: bool,
+    ) {
         let vertical_gap: f32 = 1.0;
 
         // calculate how wide (and tall) the entire string will be
@@ -473,31 +578,34 @@ impl KihonPlugin {
         let mut galley_data = Vec::new();
 
         for furigana in furigana_vec {
-            let main_galley = ui.fonts_mut(|f| {
-                f.layout_no_wrap(
-                    furigana.ruby.to_string(),
-                    egui::FontId::proportional(app::BIG_TEXT_SIZE * font_scale),
-                    app::PRIMARY_TEXT_COLOR,
-                )
-            });
+            let mut main_rich = RichText::new(furigana.ruby.to_string())
+                .size(app::BIG_TEXT_SIZE * font_scale)
+                .color(app::PRIMARY_TEXT_COLOR);
+            if is_selected {
+                main_rich = main_rich.underline();
+            }
+            let main_galley = egui::WidgetText::from(main_rich).into_galley(
+                ui,
+                None,
+                f32::INFINITY,
+                egui::FontSelection::Default,
+            );
 
-            let furigana_galley = if let Some(reading) = &furigana.rt {
-                ui.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        reading.to_string(),
-                        egui::FontId::proportional(app::TINY_TEXT_SIZE * font_scale),
-                        app::LIGHT_TEXT_COLOR,
-                    )
-                })
+            let mut furigana_rich = if let Some(reading) = &furigana.rt {
+                RichText::new(reading.to_string())
+                    .size(app::TINY_TEXT_SIZE * font_scale)
+                    .color(app::LIGHT_TEXT_COLOR)
             } else {
-                ui.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        "あ".to_string(), // invisible placeholder
-                        egui::FontId::proportional(app::TINY_TEXT_SIZE * font_scale),
-                        Color32::TRANSPARENT,
-                    )
-                })
+                RichText::new("あ")
+                    .size(app::TINY_TEXT_SIZE * font_scale)
+                    .color(Color32::TRANSPARENT)
             };
+            let furigana_galley = egui::WidgetText::from(furigana_rich).into_galley(
+                ui,
+                None,
+                f32::INFINITY,
+                egui::FontSelection::Default,
+            );
 
             let char_width: f32 = main_galley.size().x.max(furigana_galley.size().x);
             let char_height: f32 = main_galley.size().y + furigana_galley.size().y + vertical_gap;

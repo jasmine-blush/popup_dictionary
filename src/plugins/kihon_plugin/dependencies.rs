@@ -2,10 +2,11 @@ use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 use tar::Archive;
 use xz2::read::XzDecoder;
+use zip::ZipArchive;
 
 const JUMANDIC_URL: &str =
     "https://github.com/daac-tools/vibrato/releases/download/v0.5.0/jumandic-mecab-7_0.tar.xz";
@@ -18,6 +19,10 @@ const JMDICT_SIMPLIFIED_HASH: &str =
 const LEEDS_FREQUENCIES_URL: &str = "https://github.com/hingston/japanese/raw/78a5f64e872e4a2ad430adfd124c98f5f0a1619b/44492-japanese-words-latin-lines-removed.txt";
 const LEEDS_FREQUENCIES_HASH: &str =
     "770d95b7b79451614d73bcb0625555888797b76970420af5f3dd66b1767acd83";
+
+const BCCWJ_COMBINED_URL: &str = "https://github.com/Kuuuube/yomitan-dictionaries/raw/d6fde809e3f26eb5aed6d41896f332179044998c/dictionaries/BCCWJ_SUW_LUW_combined.zip";
+const BCCWJ_COMBINED_HASH: &str =
+    "e2315f451b4348db830187f1641355fd81f7944ab649e9d8ead62e5d9c7e27a2";
 
 const JMDICT_FURIGANA_URL: &str = "https://github.com/Doublevil/JmdictFurigana/releases/download/2.3.1%2B2026-01-25/JmdictFurigana.json";
 const JMDICT_FURIGANA_HASH: &str =
@@ -92,6 +97,28 @@ pub fn get_jmdict_simplified() -> Result<String, Box<dyn Error>> {
     }
 
     Err(Box::from("No JSON file found in .tgz archive"))
+}
+
+pub fn get_bccwj_combined() -> Result<String, Box<dyn Error>> {
+    let response = reqwest::blocking::get(BCCWJ_COMBINED_URL)?.bytes()?;
+
+    let zip_reader = Cursor::new(response);
+    let mut archive = ZipArchive::new(zip_reader)?;
+
+    if let Ok(mut file) = archive.by_name("term_meta_bank_1.json") {
+        let mut buffer = Vec::new();
+
+        file.read_to_end(&mut buffer)?;
+
+        verify_buf_hash(&buffer, BCCWJ_COMBINED_HASH)?;
+
+        let content =
+            String::from_utf8(buffer).map_err(|e| format!("Invalid UTF-8 sequence: {}", e))?;
+
+        return Ok(content);
+    }
+
+    Err(Box::from("No JSON file found in .zip archive"))
 }
 
 pub fn get_leeds_frequencies() -> Result<String, Box<dyn Error>> {
