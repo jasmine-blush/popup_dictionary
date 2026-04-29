@@ -188,7 +188,7 @@ impl Dictionary {
         }
 
         if path.exists() {
-            fs::remove_dir_all(path);
+            let _ = fs::remove_dir_all(path);
         }
 
         let db: Db = sled::open(path)?;
@@ -377,15 +377,11 @@ impl Dictionary {
                     }) {
                         let id = word.id.clone();
 
-                        /*
-                        let frequency_kanji = frequency_map.get(&kanji.text.as_str());
-                        let frequency_kana = frequency_map.get(&kana.text.as_str());
-                        let frequency = frequency_kanji.or(frequency_kana).cloned();*/
                         let frequency_key = FrequencyKey {
                             term: &kanji.text.as_str(),
                             reading: &kana.text.as_str(),
                         };
-                        let mut frequency = bccwj_frequency_map.get(&frequency_key);
+                        let frequency = bccwj_frequency_map.get(&frequency_key);
 
                         let common = kanji.common.clone();
                         let term = kanji.text.clone();
@@ -606,18 +602,6 @@ impl Dictionary {
         });
 
         Ok(())
-    }
-
-    fn parse_leeds_frequencies(
-        leeds_string: &str,
-    ) -> Result<AHashMap<&str, usize>, Box<dyn Error>> {
-        let frequency_map: AHashMap<&str, usize> = leeds_string
-            .lines()
-            .enumerate()
-            .map(|(i, l)| (l, i))
-            .collect();
-
-        Ok(frequency_map)
     }
 
     fn parse_bccwj_frequencies(

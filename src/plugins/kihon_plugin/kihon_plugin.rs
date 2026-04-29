@@ -241,7 +241,7 @@ impl KihonPlugin {
 
         let mut filtered_terms: Vec<DictionaryTerm> = Vec::new();
         for term in &all_terms {
-            if let Some((i, existing_term)) = filtered_terms.iter().enumerate().find(|(i, t)| {
+            if let Some((i, existing_term)) = filtered_terms.iter().enumerate().find(|(_i, t)| {
                 let alt_form = AltForm {
                     term: term.term.clone(),
                     reading: term.reading.clone(),
@@ -687,7 +687,7 @@ impl KihonPlugin {
                 egui::FontSelection::Default,
             );
 
-            let mut furigana_rich = if let Some(reading) = &furigana.rt {
+            let furigana_rich = if let Some(reading) = &furigana.rt {
                 RichText::new(reading.to_string())
                     .size(app::TINY_TEXT_SIZE * font_scale)
                     .color(app::LIGHT_TEXT_COLOR)

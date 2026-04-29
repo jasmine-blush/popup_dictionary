@@ -16,10 +16,6 @@ const JMDICT_SIMPLIFIED_URL: &str = "https://github.com/scriptin/jmdict-simplifi
 const JMDICT_SIMPLIFIED_HASH: &str =
     "7a8b282f8ec20a616606da81c64cf3da3b0d05260767af9a8cf20cc0230fd177";
 
-const LEEDS_FREQUENCIES_URL: &str = "https://github.com/hingston/japanese/raw/78a5f64e872e4a2ad430adfd124c98f5f0a1619b/44492-japanese-words-latin-lines-removed.txt";
-const LEEDS_FREQUENCIES_HASH: &str =
-    "770d95b7b79451614d73bcb0625555888797b76970420af5f3dd66b1767acd83";
-
 const BCCWJ_COMBINED_URL: &str = "https://github.com/Kuuuube/yomitan-dictionaries/raw/d6fde809e3f26eb5aed6d41896f332179044998c/dictionaries/BCCWJ_SUW_LUW_combined.zip";
 const BCCWJ_COMBINED_HASH: &str =
     "e2315f451b4348db830187f1641355fd81f7944ab649e9d8ead62e5d9c7e27a2";
@@ -119,10 +115,6 @@ pub fn get_bccwj_combined() -> Result<String, Box<dyn Error>> {
     }
 
     Err(Box::from("No JSON file found in .zip archive"))
-}
-
-pub fn get_leeds_frequencies() -> Result<String, Box<dyn Error>> {
-    fetch_string(LEEDS_FREQUENCIES_URL, LEEDS_FREQUENCIES_HASH)
 }
 
 pub fn get_jmdict_furigana() -> Result<String, Box<dyn Error>> {
