@@ -373,7 +373,13 @@ impl KihonPlugin {
             });
 
             if let Some(frequency) = dictionary_term.frequency {
-                Self::display_tag(ui, &format!("BCCWJ: {}", frequency));
+                Self::display_split_tag(
+                    ui,
+                    "BCCWJ",
+                    &format!("{}", frequency),
+                    "Word frequency of this form",
+                );
+
                 ui.add_space(app::SPACING_SIZE);
             }
 
@@ -536,12 +542,13 @@ impl KihonPlugin {
     fn display_tags(ui: &mut Ui, tags: &Vec<String>) {
         ui.horizontal_wrapped(|ui| {
             for tag in tags {
-                Self::display_tag(ui, tag);
+                let tooltip = Dictionary::get_tag(tag);
+                Self::display_tag(ui, tag, tooltip);
             }
         });
     }
 
-    fn display_tag(ui: &mut Ui, tag: &str) {
+    fn display_tag(ui: &mut Ui, tag: &str, tooltip: &str) {
         let text_galley = ui.fonts_mut(|f| {
             f.layout_no_wrap(
                 tag.to_string(),
@@ -554,7 +561,7 @@ impl KihonPlugin {
         let rect = egui::Rect::from_min_size(ui.cursor().min, text_galley.size() + (2.0 * padding));
         let response = ui
             .allocate_rect(rect, egui::Sense::hover())
-            .on_hover_text(RichText::new(Dictionary::get_tag(tag)).size(app::TINY_TEXT_SIZE));
+            .on_hover_text(RichText::new(tooltip).size(app::TINY_TEXT_SIZE));
 
         if response.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
@@ -573,6 +580,84 @@ impl KihonPlugin {
         );
 
         //ui.allocate_space(rect.size());
+    }
+
+    fn display_split_tag(ui: &mut Ui, tag: &str, info: &str, tooltip: &str) {
+        let left_galley = ui.fonts_mut(|f| {
+            f.layout_no_wrap(
+                tag.to_string(),
+                egui::FontId::proportional(app::TINY_TEXT_SIZE),
+                app::PRIMARY_TEXT_COLOR,
+            )
+        });
+
+        let right_galley = ui.fonts_mut(|f| {
+            f.layout_no_wrap(
+                info.to_string(),
+                egui::FontId::proportional(app::TINY_TEXT_SIZE),
+                app::PRIMARY_TEXT_COLOR,
+            )
+        });
+
+        let padding = egui::Vec2::new(4.0, 0.0);
+        let total_width = left_galley.size().x + right_galley.size().x + (4.0 * padding.x);
+        let height = left_galley.size().y.max(right_galley.size().y) + (2.0 * padding.y);
+        let total_size = egui::Vec2::new(total_width, height);
+
+        let rect = egui::Rect::from_min_size(ui.cursor().min, total_size);
+        let response = ui
+            .allocate_rect(rect, egui::Sense::hover())
+            .on_hover_text(egui::RichText::new(tooltip).size(app::TINY_TEXT_SIZE));
+
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Help);
+        }
+
+        let left_width = left_galley.size().x + (2.0 * padding.x);
+        let left_rect = egui::Rect::from_min_size(rect.min, egui::vec2(left_width, rect.height()));
+        let right_rect = egui::Rect::from_min_size(
+            egui::pos2(rect.min.x + left_width, rect.min.y),
+            egui::vec2(rect.width() - left_width, rect.height()),
+        );
+
+        ui.painter().rect_filled(
+            left_rect,
+            egui::CornerRadius {
+                nw: app::CORNER_RADIUS,
+                sw: app::CORNER_RADIUS,
+                ..Default::default()
+            },
+            app::SECONDARY_BACKGROUND_COLOR,
+        );
+
+        ui.painter().rect_filled(
+            right_rect,
+            egui::CornerRadius {
+                ne: app::CORNER_RADIUS,
+                se: app::CORNER_RADIUS,
+                ..Default::default()
+            },
+            Color32::TRANSPARENT,
+        );
+
+        ui.painter().rect_stroke(
+            rect,
+            egui::CornerRadius::same(app::CORNER_RADIUS),
+            egui::Stroke::new(2.0, app::SECONDARY_BACKGROUND_COLOR),
+            egui::StrokeKind::Middle,
+        );
+
+        ui.painter().galley(
+            (left_rect.center() - left_galley.size() / 2.0) - egui::Vec2::new(0.0, 1.0),
+            left_galley,
+            app::PRIMARY_TEXT_COLOR,
+        );
+
+        ui.painter().galley(
+            (right_rect.center() - right_galley.size() / 2.0) - egui::Vec2::new(0.0, 1.0),
+            right_galley,
+            app::PRIMARY_TEXT_COLOR,
+        );
     }
 
     fn display_furigana(
