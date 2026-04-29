@@ -39,8 +39,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Kihon:** Different forms (kanji/reading) of a word that hold the same
   meaning are not displayed separately anymore. Instead, the primary term
   will now show its "Other forms" in the definition.
-- **Internal:** Pinned MangaOCR dependencies to a specific version to avoid
-  potential unwanted updates.
+- **Internal:** Pinned MangaOCR dependencies and default font to a specific
+  version to avoid potential unwanted updates.
 - **Core:** The default launch behaviour when no arguments are provided now
   includes `--keep-open` and `--at-mouse`.
 - **Core:** Lowered clipboard polling delay in watch mode to 100ms from 200ms (experimental).

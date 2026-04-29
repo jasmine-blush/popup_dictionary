@@ -20,8 +20,7 @@ const FONT_CANDIDATES: [&str; 14] = [
     "Hiragino Kaku Gothic ProN",
     "Hiragino Kaku Gothic Pro",
 ];
-const FONT_URL: &str =
-    "https://github.com/googlefonts/noto-cjk/raw/main/Sans/Variable/OTC/NotoSansCJK-VF.otf.ttc";
+const FONT_URL: &str = "https://github.com/notofonts/noto-cjk/raw/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/Variable/OTC/NotoSansCJK-VF.otf.ttc";
 
 pub fn load_main_font(ctx: &egui::Context, font: &str) {
     tracing::info!("Trying to load a supported font.");
