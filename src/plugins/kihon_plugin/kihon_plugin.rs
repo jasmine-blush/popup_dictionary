@@ -120,7 +120,12 @@ impl Plugin for KihonPlugin {
                             &token.input_word
                         ))
                     {
-                        self.display_terms_prioritized(ui, &token.input_word, &dictionary_entry);
+                        self.display_terms_prioritized(
+                            ui,
+                            app,
+                            &token.input_word,
+                            &dictionary_entry,
+                        );
                     } else if let Some(dictionary_entry) = self
                         .dictionary
                         .lookup(&token.deinflected_word)
@@ -131,6 +136,7 @@ impl Plugin for KihonPlugin {
                     {
                         self.display_terms_prioritized(
                             ui,
+                            app,
                             &token.deinflected_word,
                             &dictionary_entry,
                         );
@@ -143,7 +149,12 @@ impl Plugin for KihonPlugin {
                                 &base_minus_one
                             ))
                         {
-                            self.display_terms_prioritized(ui, &base_minus_one, &dictionary_entry);
+                            self.display_terms_prioritized(
+                                ui,
+                                app,
+                                &base_minus_one,
+                                &dictionary_entry,
+                            );
                         } else {
                             let mut surface_minus_one: String = token.input_word.clone();
                             _ = surface_minus_one.pop();
@@ -155,6 +166,7 @@ impl Plugin for KihonPlugin {
                             {
                                 self.display_terms_prioritized(
                                     ui,
+                                    app,
                                     &surface_minus_one,
                                     &dictionary_entry,
                                 );
@@ -181,7 +193,13 @@ impl Plugin for KihonPlugin {
 }
 
 impl KihonPlugin {
-    fn display_terms_prioritized(&self, ui: &mut Ui, token: &str, entry: &DictionaryEntry) {
+    fn display_terms_prioritized(
+        &self,
+        ui: &mut Ui,
+        app: &MyApp,
+        token: &str,
+        entry: &DictionaryEntry,
+    ) {
         let mut all_terms: Vec<DictionaryTerm> = entry.terms.clone();
         let init_len: usize = all_terms.len();
         for i in 0..init_len {
@@ -310,10 +328,10 @@ impl KihonPlugin {
             a_weighted_frequency.cmp(&b_weighted_frequency)
         });
 
-        Self::display_terms(ui, token, &filtered_terms);
+        Self::display_terms(ui, app, token, &filtered_terms);
     }
 
-    fn display_terms(ui: &mut Ui, token: &str, terms: &Vec<DictionaryTerm>) {
+    fn display_terms(ui: &mut Ui, app: &MyApp, token: &str, terms: &Vec<DictionaryTerm>) {
         for (id, dictionary_term) in terms.iter().enumerate() {
             ui.horizontal(|ui| {
                 if !dictionary_term.term.is_empty() {
@@ -348,15 +366,8 @@ impl KihonPlugin {
                         } else {
                             dictionary_term.reading.to_owned()
                         };
-                        std::thread::spawn(|| {
-                            tracing::debug!("Trying to copy term to clipboard.");
-                            let mut clipboard: arboard::Clipboard =
-                                arboard::Clipboard::new().unwrap();
-                            clipboard.set_text(term).unwrap();
-                            std::thread::sleep(std::time::Duration::from_secs(1));
-                            drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
-                            tracing::debug!("Successfully copied term to clipboard.");
-                        });
+
+                        app.copy_text_safe(term);
                     }
                 });
             });

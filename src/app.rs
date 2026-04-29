@@ -410,6 +410,35 @@ impl MyApp {
         }
         return clicked_index;
     }
+
+    pub fn copy_text_safe(&self, text: String) {
+        let mut was_paused = true;
+        let paused_clone = match &self.paused {
+            Some(paused) => Some(paused.clone()),
+            None => None,
+        };
+        std::thread::spawn(move || {
+            if let Some(paused) = &paused_clone {
+                was_paused = paused.load(Ordering::Relaxed);
+                if !was_paused {
+                    paused.store(true, Ordering::Relaxed);
+                }
+            }
+
+            tracing::debug!("Trying to copy text to clipboard.");
+            let mut clipboard: arboard::Clipboard = arboard::Clipboard::new().unwrap();
+            clipboard.set_text(text).unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            drop(clipboard); // since clipboard is dropped here, linux users need a clipboard manager to retain data
+            tracing::debug!("Successfully copied text to clipboard.");
+
+            if !was_paused {
+                if let Some(paused) = &paused_clone {
+                    paused.store(false, Ordering::Relaxed);
+                }
+            }
+        });
+    }
 }
 
 impl eframe::App for MyApp {
