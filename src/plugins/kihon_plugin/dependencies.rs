@@ -20,6 +20,9 @@ const BCCWJ_COMBINED_URL: &str = "https://github.com/Kuuuube/yomitan-dictionarie
 const BCCWJ_COMBINED_HASH: &str =
     "e2315f451b4348db830187f1641355fd81f7944ab649e9d8ead62e5d9c7e27a2";
 
+const JITEN_MOE_URL: &str = "https://api.jiten.moe/api/frequency-list/download?downloadType=csv";
+const JITEN_MOE_HASH: &str = "657bfba0a43909963ecb5091b887336d4f1296d1f82e6564f23ff7458818b894";
+
 const JMDICT_FURIGANA_URL: &str = "https://github.com/Doublevil/JmdictFurigana/releases/download/2.3.1%2B2026-01-25/JmdictFurigana.json";
 const JMDICT_FURIGANA_HASH: &str =
     "fb0d0deca666e68acaf65a0cc1e278605d1b8391ff4e491f9728d934aafb5b69";
@@ -115,6 +118,10 @@ pub fn get_bccwj_combined() -> Result<String, Box<dyn Error>> {
     }
 
     Err(Box::from("No JSON file found in .zip archive"))
+}
+
+pub fn get_jiten_moe() -> Result<String, Box<dyn Error>> {
+    fetch_string(JITEN_MOE_URL, JITEN_MOE_HASH)
 }
 
 pub fn get_jmdict_furigana() -> Result<String, Box<dyn Error>> {

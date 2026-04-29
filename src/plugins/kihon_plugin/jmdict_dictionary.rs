@@ -47,13 +47,30 @@ pub struct DictionaryEntry {
 #[derive(bincode::Encode, bincode::Decode, Clone, Debug)]
 pub struct DictionaryTerm {
     pub id: String,
-    pub frequency: Option<usize>,
+    pub frequency: DictionaryFrequency,
     pub common: bool,
     pub term: String,
     pub reading: String,
     pub alt_forms: Vec<AltForm>,
     pub furigana: Option<Vec<DictionaryFurigana>>,
     pub meanings: Vec<DictionaryMeaning>,
+}
+
+#[derive(bincode::Encode, bincode::Decode, Clone, Debug)]
+pub struct DictionaryFrequency {
+    bccwj: Option<usize>,
+    jiten: Option<usize>,
+}
+impl DictionaryFrequency {
+    pub fn get_for_cmp(&self) -> Option<usize> {
+        if self.bccwj.is_some() {
+            return self.bccwj;
+        }
+        return self.jiten;
+    }
+    pub fn get_all(&self) -> (Option<usize>, Option<usize>) {
+        return (self.bccwj, self.jiten);
+    }
 }
 
 #[derive(bincode::Encode, bincode::Decode, Clone, Debug, PartialEq, Eq)]
@@ -151,6 +168,7 @@ struct BCCWJData<'b> {
 
 struct Dependencies {
     bccwj: String,
+    jiten: String,
     furigana: String,
     simplified: String,
 }
@@ -161,7 +179,7 @@ struct FrequencyKey<'c> {
     reading: &'c str,
 }
 
-const DB_VERSION_FLAG: &str = "db_version_003";
+const DB_VERSION_FLAG: &str = "db_version_004";
 
 impl Dictionary {
     pub fn load_dictionary(
@@ -289,17 +307,32 @@ impl Dictionary {
             crate::plugins::kihon_plugin::dependencies::get_jmdict_furigana().unwrap()
         });
 
+        // frequency_list_global.csv
+        let jiten_frequency_handle = std::thread::spawn(|| {
+            tracing::debug!("Downloading jiten-moe.");
+
+            crate::plugins::kihon_plugin::dependencies::get_jiten_moe().unwrap()
+        });
+
         change_progress(
             progress,
-            "Downloading datasets [1/3]. \nThis may take a few minutes.",
+            "Downloading datasets [1/4]. \nThis may take a few minutes.",
+        );
+        let jiten_frequency = jiten_frequency_handle
+            .join()
+            .map_err(|e| format!("Could not download jiten-moe: {:?}", e))?;
+        tracing::debug!("jiten-moe successfully downloaded.");
+        change_progress(
+            progress,
+            "Downloading datasets [2/4]. \nThis may take a few minutes.",
         );
         let jmdict_furigana = jmdict_furigana_handle
             .join()
-            .map_err(|e| format!("Could not download jmdict-furigan: {:?}", e))?;
+            .map_err(|e| format!("Could not download jmdict-furigana: {:?}", e))?;
         tracing::debug!("jmdict-furigana successfully downloaded.");
         change_progress(
             progress,
-            "Downloading datasets [2/3]. \nThis may take a few minutes.",
+            "Downloading datasets [3/4]. \nThis may take a few minutes.",
         );
         let bccwj_frequency = bccwj_frequency_handle
             .join()
@@ -307,7 +340,7 @@ impl Dictionary {
         tracing::debug!("bccwj-combined successfully downloaded.");
         change_progress(
             progress,
-            "Downloading datasets [3/3]. \nThis may take a few minutes.",
+            "Downloading datasets [4/4]. \nThis may take a few minutes.",
         );
         let jmdict_simplified = jmdict_simplified_handle
             .join()
@@ -316,6 +349,7 @@ impl Dictionary {
 
         Ok(Dependencies {
             bccwj: bccwj_frequency,
+            jiten: jiten_frequency,
             furigana: jmdict_furigana,
             simplified: jmdict_simplified,
         })
@@ -332,6 +366,8 @@ impl Dictionary {
         );
         let bccwj_frequency_map: AHashMap<FrequencyKey, usize> =
             Self::parse_bccwj_frequencies(&dependencies.bccwj)?;
+        let jiten_frequency_map: AHashMap<FrequencyKey, usize> =
+            Self::parse_jiten_frequencies(&dependencies.jiten)?;
         change_progress(
             &progress,
             "Parsing furigana data. \nThis may take a few minutes.",
@@ -381,7 +417,12 @@ impl Dictionary {
                             term: &kanji.text.as_str(),
                             reading: &kana.text.as_str(),
                         };
-                        let frequency = bccwj_frequency_map.get(&frequency_key);
+                        let bccjw_frequency = bccwj_frequency_map.get(&frequency_key);
+                        let jiten_frequency = jiten_frequency_map.get(&frequency_key);
+                        let frequency = DictionaryFrequency {
+                            bccwj: bccjw_frequency.cloned(),
+                            jiten: jiten_frequency.cloned(),
+                        };
 
                         let common = kanji.common.clone();
                         let term = kanji.text.clone();
@@ -402,7 +443,7 @@ impl Dictionary {
                             DictionaryKey::Term(kanji.text.clone()),
                             DictionaryTerm {
                                 id: id.clone(),
-                                frequency: frequency.cloned(),
+                                frequency: frequency.clone(),
                                 common,
                                 term: term.clone(),
                                 reading: reading.clone(),
@@ -419,7 +460,7 @@ impl Dictionary {
                             DictionaryKey::Reading(kana.text.clone()),
                             DictionaryTerm {
                                 id,
-                                frequency: frequency.cloned(),
+                                frequency: frequency.clone(),
                                 common,
                                 term,
                                 reading,
@@ -437,12 +478,16 @@ impl Dictionary {
                     .filter(|kana| kana.applies_to_kanji.is_empty())
                 {
                     let id = word.id.clone();
-                    //let frequency = frequency_map.get(&kana.text.as_str()).cloned();
                     let frequency_key = FrequencyKey {
                         term: &kana.text.as_str(),
                         reading: &kana.text.as_str(),
                     };
-                    let frequency = bccwj_frequency_map.get(&frequency_key);
+                    let bccjw_frequency = bccwj_frequency_map.get(&frequency_key);
+                    let jiten_frequency = jiten_frequency_map.get(&frequency_key);
+                    let frequency = DictionaryFrequency {
+                        bccwj: bccjw_frequency.cloned(),
+                        jiten: jiten_frequency.cloned(),
+                    };
                     let common = kana.common.clone();
 
                     let reading = kana.text.clone();
@@ -463,7 +508,7 @@ impl Dictionary {
                         DictionaryKey::Reading(kana.text.clone()),
                         DictionaryTerm {
                             id,
-                            frequency: frequency.cloned(),
+                            frequency: frequency.clone(),
                             common,
                             term: String::new(),
                             reading,
@@ -512,12 +557,16 @@ impl Dictionary {
             } else {
                 for kana in &word.kana {
                     let id = word.id.clone();
-                    //let frequency = frequency_map.get(&kana.text.as_str()).cloned();
                     let frequency_key = FrequencyKey {
                         term: &kana.text.as_str(),
                         reading: &kana.text.as_str(),
                     };
-                    let frequency = bccwj_frequency_map.get(&frequency_key);
+                    let bccjw_frequency = bccwj_frequency_map.get(&frequency_key);
+                    let jiten_frequency = jiten_frequency_map.get(&frequency_key);
+                    let frequency = DictionaryFrequency {
+                        bccwj: bccjw_frequency.cloned(),
+                        jiten: jiten_frequency.cloned(),
+                    };
                     let common = kana.common.clone();
 
                     let reading = kana.text.clone();
@@ -538,7 +587,7 @@ impl Dictionary {
                         DictionaryKey::Reading(kana.text.clone()),
                         DictionaryTerm {
                             id,
-                            frequency: frequency.cloned(),
+                            frequency: frequency.clone(),
                             common,
                             term: String::new(),
                             reading,
@@ -588,11 +637,6 @@ impl Dictionary {
             let mut batch = sled::Batch::default();
 
             for (key, mut entry) in chunk {
-                entry.terms.sort_unstable_by(|a, b| {
-                    b.common
-                        .cmp(&a.common)
-                        .then_with(|| a.frequency.cmp(&b.frequency))
-                });
                 let serialized_entry: Vec<u8> =
                     bincode::encode_to_vec(&entry, bincode::config::standard()).unwrap();
                 batch.insert(key.serialize(), serialized_entry);
@@ -620,6 +664,45 @@ impl Dictionary {
                     *e = (*e).min(item.2.frequency);
                 })
                 .or_insert(item.2.frequency);
+        }
+
+        // special frequency for 乃「の」to prioritize even when written as kana
+        frequency_map.insert(
+            FrequencyKey {
+                term: "乃",
+                reading: "の",
+            },
+            1,
+        );
+
+        Ok(frequency_map)
+    }
+
+    fn parse_jiten_frequencies(
+        jiten_string: &str,
+    ) -> Result<AHashMap<FrequencyKey<'_>, usize>, Box<dyn Error>> {
+        let lines: Vec<&str> = jiten_string.split_whitespace().collect();
+
+        let mut frequency_map: AHashMap<FrequencyKey, usize> = AHashMap::with_capacity(lines.len());
+        for i in 1..lines.len() {
+            let line = lines[i];
+
+            let entry: Vec<&str> = line.split(',').collect();
+
+            if entry.len() == 3 {
+                let term = entry[0];
+                let reading = entry[1];
+                let frequency: usize = entry[2].parse()?;
+                frequency_map
+                    .entry(FrequencyKey {
+                        term: term,
+                        reading: reading,
+                    })
+                    .and_modify(|e| {
+                        *e = (*e).min(frequency);
+                    })
+                    .or_insert(frequency);
+            }
         }
 
         // special frequency for 乃「の」to prioritize even when written as kana

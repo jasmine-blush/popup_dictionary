@@ -230,8 +230,8 @@ impl KihonPlugin {
                 };
                 t.alt_forms.contains(&alt_form) && t.id == term.id
             }) {
-                if let Some(frequency) = term.frequency {
-                    if let Some(existing_frequency) = existing_term.frequency {
+                if let Some(frequency) = term.frequency.get_for_cmp() {
+                    if let Some(existing_frequency) = existing_term.frequency.get_for_cmp() {
                         if frequency < existing_frequency {
                             filtered_terms[i] = term.clone();
                         }
@@ -239,7 +239,10 @@ impl KihonPlugin {
                         filtered_terms[i] = term.clone();
                     }
                 } else {
-                    if existing_term.frequency.is_none() && term.common && !existing_term.common {
+                    if existing_term.frequency.get_for_cmp().is_none()
+                        && term.common
+                        && !existing_term.common
+                    {
                         filtered_terms[i] = term.clone();
                     }
                 }
@@ -249,7 +252,7 @@ impl KihonPlugin {
         }
 
         filtered_terms.sort_unstable_by(|a, b| {
-            let a_weighted_frequency = match a.frequency {
+            let a_weighted_frequency = match a.frequency.get_for_cmp() {
                 Some(frequency) => frequency,
                 None => {
                     if a.common {
@@ -259,7 +262,7 @@ impl KihonPlugin {
                     }
                 }
             };
-            let b_weighted_frequency = match b.frequency {
+            let b_weighted_frequency = match b.frequency.get_for_cmp() {
                 Some(frequency) => frequency,
                 None => {
                     if b.common {
@@ -353,15 +356,31 @@ impl KihonPlugin {
                 });
             });
 
-            if let Some(frequency) = dictionary_term.frequency {
-                Self::display_split_tag(
-                    ui,
-                    "BCCWJ",
-                    &format!("{}", frequency),
-                    "Word frequency of this form",
-                );
+            let mut has_freq = false;
+            ui.horizontal(|ui| {
+                let (bccjw, jiten) = dictionary_term.frequency.get_all();
 
-                ui.add_space(app::SPACING_SIZE);
+                if let Some(frequency) = bccjw {
+                    has_freq = true;
+                    Self::display_split_tag(
+                        ui,
+                        "BCCWJ",
+                        &format!("{}", frequency),
+                        "Word frequency of this form",
+                    );
+                }
+                if let Some(frequency) = jiten {
+                    has_freq = true;
+                    Self::display_split_tag(
+                        ui,
+                        "Jiten",
+                        &format!("{}", frequency),
+                        "Word frequency of this form",
+                    );
+                }
+            });
+            if has_freq {
+                ui.add_space(app::SPACING_SIZE * 2.0);
             }
 
             let mut count: u32 = 0;

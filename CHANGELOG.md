@@ -21,8 +21,9 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   the clipboard in watch mode even while the window is already/still open.
 - **UI:** Plugins can now display helpful status information while loading.
 - **UI:** A pause button inside the UI when the new `--keep-open` option is set.
-- **Kihon:** BCCWJ as the primary frequency dataset (replacing the leeds corpus).
-- **Kihon:** Frequencies (currently BCCWJ) are now shown for each definition term.
+- **Kihon:** BCCWJ as the primary frequency dataset (replacing the leeds corpus)
+  and the Jiten.moe frequency data as a secondary dataset.
+- **Kihon:** Frequencies are now shown for each definition term.
 - **UI:** A paste button in the tray menu in watch mode, as well as in the UI
   when the new `--keep-open` option is set. This button is useful in situations
   where e.g. the watcher is/was paused but content already in the clipboard
@@ -45,8 +46,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   includes `--keep-open` and `--at-mouse`.
 - **Core:** Lowered clipboard polling delay in watch mode to 100ms from 200ms (experimental).
 - **Kihon:** Significantly improved performance of the Kihon database generation
-  via multi-threading and general code improvements. Dataset files are now
-  not saved to disk anymore.
+  via multi-threading and general code improvements. Dataset files are no
+  longer saved to disk.
 - **UI:** Moved the copy input button to the input bar at the top of the UI.
 - **UI:** The open in web button now uses a globe symbol (from an i symbol).
 - **Kihon:** Definition terms are now sorted much more naturally using
