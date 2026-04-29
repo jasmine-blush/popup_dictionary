@@ -64,6 +64,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 ### Fixed
 
 - **Kihon:** Some alignment text being selectable that is meant to be invisible.
+- **UI:** The vertical scroll position in the definitions panel does not carry
+  over to every word anymore but is remembered separately for each one.
 
 ### Security
 

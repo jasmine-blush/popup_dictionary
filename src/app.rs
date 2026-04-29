@@ -687,7 +687,9 @@ impl eframe::App for MyApp {
 
                         let center_height = ui.available_height() - footer_height;
                         egui::ScrollArea::vertical()
-                            .id_salt("plugin_display_section")
+                            .id_salt(
+                                egui::Id::new("plugin_display_section").with(selected_token_idx),
+                            )
                             .max_height(center_height)
                             .auto_shrink(false)
                             .show(ui, |ui| {

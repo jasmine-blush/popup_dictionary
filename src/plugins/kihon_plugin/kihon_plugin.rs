@@ -103,79 +103,60 @@ impl Plugin for KihonPlugin {
             ui.separator();
         });
 
-        ui.indent("scroll_indent", |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    /*
-                    Lookup in database in this order until exists:
-                    1. surface                                     -- first
-                    2. base
-                    3. base minus last letter (e.g. 素敵な)
-                    4. surface minus last letter                -- last
-                    */
+        ui.indent("terms_indent", |ui| {
+            /*
+            Lookup in database in this order until exists:
+            1. surface                                     -- first
+            2. base
+            3. base minus last letter (e.g. 素敵な)
+            4. surface minus last letter                -- last
+            */
+            if let Some(dictionary_entry) =
+                self.dictionary.lookup(&token.input_word).expect(&format!(
+                    "Error getting from database when looking up surface: {}",
+                    &token.input_word
+                ))
+            {
+                self.display_terms_prioritized(ui, app, &token.input_word, &dictionary_entry);
+            } else if let Some(dictionary_entry) = self
+                .dictionary
+                .lookup(&token.deinflected_word)
+                .expect(&format!(
+                    "Error getting from database when looking up base: {}",
+                    &token.deinflected_word
+                ))
+            {
+                self.display_terms_prioritized(ui, app, &token.deinflected_word, &dictionary_entry);
+            } else {
+                let mut base_minus_one: String = token.deinflected_word.clone();
+                _ = base_minus_one.pop();
+                if let Some(dictionary_entry) =
+                    self.dictionary.lookup(&base_minus_one).expect(&format!(
+                        "Error getting from database when looking up base-1: {}",
+                        &base_minus_one
+                    ))
+                {
+                    self.display_terms_prioritized(ui, app, &base_minus_one, &dictionary_entry);
+                } else {
+                    let mut surface_minus_one: String = token.input_word.clone();
+                    _ = surface_minus_one.pop();
                     if let Some(dictionary_entry) =
-                        self.dictionary.lookup(&token.input_word).expect(&format!(
-                            "Error getting from database when looking up surface: {}",
-                            &token.input_word
+                        self.dictionary.lookup(&surface_minus_one).expect(&format!(
+                            "Error getting from database when looking up surface-1: {}",
+                            &surface_minus_one
                         ))
                     {
                         self.display_terms_prioritized(
                             ui,
                             app,
-                            &token.input_word,
+                            &surface_minus_one,
                             &dictionary_entry,
                         );
-                    } else if let Some(dictionary_entry) = self
-                        .dictionary
-                        .lookup(&token.deinflected_word)
-                        .expect(&format!(
-                            "Error getting from database when looking up base: {}",
-                            &token.deinflected_word
-                        ))
-                    {
-                        self.display_terms_prioritized(
-                            ui,
-                            app,
-                            &token.deinflected_word,
-                            &dictionary_entry,
-                        );
-                    } else {
-                        let mut base_minus_one: String = token.deinflected_word.clone();
-                        _ = base_minus_one.pop();
-                        if let Some(dictionary_entry) =
-                            self.dictionary.lookup(&base_minus_one).expect(&format!(
-                                "Error getting from database when looking up base-1: {}",
-                                &base_minus_one
-                            ))
-                        {
-                            self.display_terms_prioritized(
-                                ui,
-                                app,
-                                &base_minus_one,
-                                &dictionary_entry,
-                            );
-                        } else {
-                            let mut surface_minus_one: String = token.input_word.clone();
-                            _ = surface_minus_one.pop();
-                            if let Some(dictionary_entry) =
-                                self.dictionary.lookup(&surface_minus_one).expect(&format!(
-                                    "Error getting from database when looking up surface-1: {}",
-                                    &surface_minus_one
-                                ))
-                            {
-                                self.display_terms_prioritized(
-                                    ui,
-                                    app,
-                                    &surface_minus_one,
-                                    &dictionary_entry,
-                                );
-                            }
-                        }
                     }
+                }
+            }
 
-                    //ui.add_space(app::SPACING_SIZE * 4.0);
-                });
+            //ui.add_space(app::SPACING_SIZE * 4.0);
         });
     }
 
