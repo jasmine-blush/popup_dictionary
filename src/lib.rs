@@ -34,11 +34,18 @@ fn open_app(
     config: app::Config,
     new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
     paused: Option<Arc<AtomicBool>>,
+    do_paste: Option<Arc<AtomicBool>>,
 ) -> Result<(), Box<dyn Error>> {
     let valid_sentence: String = validate_sentence(&sentence)?;
 
     tracing::info!("Input looks good. Launching dictionary app.");
-    run_app(&valid_sentence, config, new_sentence_mutex, paused)?;
+    run_app(
+        &valid_sentence,
+        config,
+        new_sentence_mutex,
+        paused,
+        do_paste,
+    )?;
 
     Ok(())
 }
@@ -75,7 +82,7 @@ fn contains_japanese(text: &str) -> bool {
 }
 
 pub fn run(sentence: &str, config: app::Config) -> Result<(), Box<dyn Error>> {
-    open_app(&sentence, config, None, None)?;
+    open_app(&sentence, config, None, None, None)?;
 
     Ok(())
 }
@@ -172,6 +179,7 @@ pub fn watch(
     config: app::Config,
     paused: Arc<AtomicBool>,
     ocr_model: Arc<AtomicUsize>,
+    do_paste: Arc<AtomicBool>,
     keep_open: bool,
 ) -> Result<(), Box<dyn Error>> {
     tracing::info!("Attempting to run watch mode.");
@@ -189,6 +197,7 @@ pub fn watch(
 
         let paused_clone = Arc::clone(&paused);
         let ocr_model_clone = Arc::clone(&ocr_model);
+        let do_paste_clone = Arc::clone(&do_paste);
 
         std::thread::spawn(move || {
             let mut clipboard: Clipboard = match Clipboard::new() {
@@ -207,15 +216,23 @@ pub fn watch(
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
-                if paused_clone.load(Ordering::Relaxed) {
-                    was_paused = true;
-                    continue;
-                }
-                if was_paused {
-                    // Replace initial_content with current here to prevent acting on clipboard content
-                    // that was copied while paused.
-                    initial_content = get_clipboard_content(&mut clipboard);
-                    was_paused = false;
+                if do_paste_clone.load(Ordering::Relaxed) {
+                    initial_content = ClipboardContent {
+                        image: None,
+                        text: None,
+                    };
+                    do_paste_clone.store(false, Ordering::Relaxed);
+                } else {
+                    if paused_clone.load(Ordering::Relaxed) {
+                        was_paused = true;
+                        continue;
+                    }
+                    if was_paused {
+                        // Replace initial_content with current here to prevent acting on clipboard content
+                        // that was copied while paused.
+                        initial_content = get_clipboard_content(&mut clipboard);
+                        was_paused = false;
+                    }
                 }
 
                 let current_content: ClipboardContent = get_clipboard_content(&mut clipboard);
@@ -286,6 +303,7 @@ pub fn watch(
                         config.clone(),
                         Some(Arc::clone(&new_sentence_channel)),
                         Some(Arc::clone(&paused)),
+                        Some(Arc::clone(&do_paste)),
                     ) {
                         tracing::warn!(
                             "Failed while running in keep-open watch mode due to error: {e}"
@@ -318,15 +336,23 @@ pub fn watch(
         loop {
             std::thread::sleep(std::time::Duration::from_millis(100));
 
-            if paused.load(Ordering::Relaxed) {
-                was_paused = true;
-                continue;
-            }
-            if was_paused {
-                // Replace initial_content with current here to prevent acting on clipboard content
-                // that was copied while paused.
-                initial_content = get_clipboard_content(&mut clipboard);
-                was_paused = false;
+            if do_paste.load(Ordering::Relaxed) {
+                initial_content = ClipboardContent {
+                    image: None,
+                    text: None,
+                };
+                do_paste.store(false, Ordering::Relaxed);
+            } else {
+                if paused.load(Ordering::Relaxed) {
+                    was_paused = true;
+                    continue;
+                }
+                if was_paused {
+                    // Replace initial_content with current here to prevent acting on clipboard content
+                    // that was copied while paused.
+                    initial_content = get_clipboard_content(&mut clipboard);
+                    was_paused = false;
+                }
             }
 
             let current_content: ClipboardContent = get_clipboard_content(&mut clipboard);

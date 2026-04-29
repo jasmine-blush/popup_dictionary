@@ -39,6 +39,7 @@ pub fn run_app(
     config: Config,
     new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
     paused: Option<Arc<AtomicBool>>,
+    do_paste: Option<Arc<AtomicBool>>,
 ) -> Result<(), eframe::Error> {
     #[cfg(feature = "hyprland-support")]
     let is_hyprland: bool = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok();
@@ -129,6 +130,7 @@ pub fn run_app(
                 sentence,
                 new_sentence_mutex,
                 paused,
+                do_paste,
             )))
         }),
     )
@@ -157,6 +159,7 @@ pub struct MyApp {
     was_edited: bool,
     new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
     paused: Option<Arc<AtomicBool>>,
+    do_paste: Option<Arc<AtomicBool>>,
 }
 
 impl MyApp {
@@ -168,6 +171,7 @@ impl MyApp {
         sentence: &str,
         new_sentence_mutex: Option<Arc<Mutex<Option<String>>>>,
         paused: Option<Arc<AtomicBool>>,
+        do_paste: Option<Arc<AtomicBool>>,
     ) -> Self {
         crate::font_helper::load_main_font(&cc.egui_ctx, &config.font);
 
@@ -198,6 +202,7 @@ impl MyApp {
             was_edited: false,
             new_sentence_mutex,
             paused,
+            do_paste,
         };
 
         app.try_load_plugin(init_plugin_idx, false);
@@ -859,6 +864,22 @@ impl eframe::App for MyApp {
                                         tracing::info!("Pausing watcher.");
                                         paused.store(true, Ordering::Relaxed);
                                     }
+                                }
+                            }
+
+                            // paste button if in keep-open watch mode
+                            if let Some(do_paste) = &self.do_paste {
+                                if ui
+                                    .add(egui::Button::new(
+                                        RichText::new("\u{1f53c}").size(SMALL_TEXT_SIZE),
+                                    ))
+                                    .on_hover_text(
+                                        RichText::new("Paste from clipboard").size(TINY_TEXT_SIZE),
+                                    )
+                                    .clicked()
+                                {
+                                    tracing::info!("Pasting from clipboard.");
+                                    do_paste.store(true, Ordering::Relaxed);
                                 }
                             }
                         });

@@ -3,7 +3,11 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
+pub fn spawn_tray_icon(
+    paused: Arc<AtomicBool>,
+    ocr_model: Arc<AtomicUsize>,
+    do_paste: Arc<AtomicBool>,
+) {
     tracing::info!("Spawning tray icon.");
 
     #[cfg(target_os = "linux")]
@@ -16,7 +20,11 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
                 .unwrap();
 
             rt.block_on(async {
-                let tray = MyTray { paused, ocr_model };
+                let tray = MyTray {
+                    paused,
+                    ocr_model,
+                    do_paste,
+                };
                 let _handle = tray.spawn().await.unwrap();
 
                 std::future::pending::<()>().await;
@@ -42,6 +50,8 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
             let icon = Icon::from_rgba(image.into_raw(), width, height).unwrap();
 
             let tray_menu = Menu::new();
+            let pause_item = MenuItem::new("Pause", true, None);
+            let paste_item = MenuItem::new("Paste", true, None);
             let active_ocr_model = ocr_model.load(Ordering::Relaxed);
             let ocr_label = if active_ocr_model == 0 {
                 "Switch to MangaOCR"
@@ -51,10 +61,11 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
                 ""
             };
             let ocr_item = MenuItem::new(ocr_label, true, None);
-            let pause_item = MenuItem::new("Pause", true, None);
             let quit_item = MenuItem::new("Exit", true, None);
-            tray_menu.append(&ocr_item).unwrap();
+
             tray_menu.append(&pause_item).unwrap();
+            tray_menu.append(&paste_item).unwrap();
+            tray_menu.append(&ocr_item).unwrap();
             tray_menu.append(&quit_item).unwrap();
 
             let tray = TrayIconBuilder::new()
@@ -82,10 +93,15 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
                         } else if event.id == ocr_item.id() {
                             let previous_model = ocr_model.fetch_xor(1, Ordering::Relaxed);
                             if previous_model == 0 {
+                                tracing::info!("Switching to MangaOCR.");
                                 ocr_item.set_text("Switch to Tesseract");
                             } else if previous_model == 1 {
+                                tracing::info!("Switching to MangaOCR.");
                                 ocr_item.set_text("Switch to MangaOCR");
                             }
+                        } else if event.id == paste_item.id() {
+                            do_paste.store(true, Ordering::Relaxed);
+                            tracing::info!("Pasting from clipboard.");
                         }
                     }
 
@@ -102,6 +118,7 @@ pub fn spawn_tray_icon(paused: Arc<AtomicBool>, ocr_model: Arc<AtomicUsize>) {
 struct MyTray {
     paused: Arc<AtomicBool>,
     ocr_model: Arc<AtomicUsize>,
+    do_paste: Arc<AtomicBool>,
 }
 
 #[cfg(target_os = "linux")]
@@ -142,15 +159,8 @@ impl ksni::Tray for MyTray {
         };
         let is_paused = self.paused.load(Ordering::Relaxed);
         let pause_label = if is_paused { "Resume" } else { "Pause" };
+        let paste_label = "Paste";
         vec![
-            StandardItem {
-                label: ocr_label.into(),
-                activate: Box::new(|this: &mut Self| {
-                    this.ocr_model.fetch_xor(1, Ordering::Relaxed);
-                }),
-                ..Default::default()
-            }
-            .into(),
             StandardItem {
                 label: pause_label.into(),
                 activate: Box::new(|this: &mut Self| {
@@ -159,6 +169,28 @@ impl ksni::Tray for MyTray {
                         tracing::info!("Resuming watcher.");
                     } else {
                         tracing::info!("Pausing watcher.");
+                    }
+                }),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: paste_label.into(),
+                activate: Box::new(|this: &mut Self| {
+                    this.do_paste.store(true, Ordering::Relaxed);
+                    tracing::info!("Pasting from clipboard.");
+                }),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: ocr_label.into(),
+                activate: Box::new(|this: &mut Self| {
+                    let previous_model = this.ocr_model.fetch_xor(1, Ordering::Relaxed);
+                    if previous_model == 0 {
+                        tracing::info!("Switching to MangaOCR.");
+                    } else {
+                        tracing::info!("Switching to Tesseract.");
                     }
                 }),
                 ..Default::default()

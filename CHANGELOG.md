@@ -23,6 +23,10 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **UI:** A pause button inside the UI when the new `--keep-open` option is set.
 - **Kihon:** BCCWJ as the primary frequency dataset (replacing the leeds corpus).
 - **Kihon:** Frequencies (currently BCCWJ) are now shown for each definition term.
+- **UI:** A paste button in the tray menu in watch mode, as well as in the UI
+  when the new `--keep-open` option is set. This button is useful in situations
+  where e.g. the watcher is/was paused but content already in the clipboard
+  should be used as new input.
 
 ### Changed
 
