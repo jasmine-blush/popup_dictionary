@@ -52,11 +52,11 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Removed
 
+- **Kihon:** The University of Leeds Corpus frequency dataset.
+
 ### Fixed
 
 - **Kihon:** Some alignment text being selectable that is meant to be invisible.
-- **Internal:** The download URL for the Leeds Frequency Corpus which downloaded
-  a whole webpage instead of a text file until now.
 
 ### Security
 
