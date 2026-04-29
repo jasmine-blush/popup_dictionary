@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sled::Db;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -160,23 +161,42 @@ struct FrequencyKey<'c> {
     reading: &'c str,
 }
 
-const DB_VERSION_FLAG: &str = "db_version_002";
+const DB_VERSION_FLAG: &str = "db_version_003";
 
 impl Dictionary {
     pub fn load_dictionary(
         path: &PathBuf,
         progress: &Arc<Mutex<String>>,
     ) -> Result<Self, Box<dyn Error>> {
-        let db: Db = sled::open(path)?;
+        let version_flag_path = path.join("version.dat");
+        let mut valid_db = false;
 
-        if db.was_recovered() {
-            if db.contains_key(DB_VERSION_FLAG)? {
-                return Ok(Self { db });
+        if version_flag_path.exists() {
+            if let Ok(version) = fs::read_to_string(&version_flag_path) {
+                if version.trim() == DB_VERSION_FLAG {
+                    valid_db = true;
+                }
             }
-            db.clear()?;
+        }
+        if valid_db {
+            let db: Db = sled::open(path)?;
+            if db.was_recovered() {
+                if db.contains_key(DB_VERSION_FLAG)? {
+                    return Ok(Self { db });
+                }
+            }
         }
 
+        if path.exists() {
+            fs::remove_dir_all(path);
+        }
+
+        let db: Db = sled::open(path)?;
+
         Self::populate_database(&db, progress)?;
+
+        fs::write(&version_flag_path, DB_VERSION_FLAG)?;
+
         Ok(Self { db })
     }
 
@@ -188,6 +208,7 @@ impl Dictionary {
 
         let dependencies = Self::fetch_dependencies(progress)?;
         Self::parse_jmdict_simplified(&db, dependencies, progress)?;
+
         db.insert(DB_VERSION_FLAG, "")?;
         db.flush()?;
 

@@ -27,6 +27,9 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   when the new `--keep-open` option is set. This button is useful in situations
   where e.g. the watcher is/was paused but content already in the clipboard
   should be used as new input.
+- **Kihon:** An extra pre-check using a file to detect a successfully generated
+  database. This reduces initial loading time when an outdated or corrupted
+  database exists that needs to be regenerated.
 
 ### Changed
 
