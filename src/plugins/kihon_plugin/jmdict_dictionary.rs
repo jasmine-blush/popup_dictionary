@@ -362,24 +362,87 @@ impl Dictionary {
     ) -> Result<(), Box<dyn Error>> {
         change_progress(
             &progress,
-            "Parsing frequency data. \nThis may take a few minutes.",
+            "Parsing datasets [0/4]. \nThis may take a few minutes.",
         );
-        let bccwj_frequency_map: AHashMap<FrequencyKey, usize> =
-            Self::parse_bccwj_frequencies(&dependencies.bccwj)?;
-        let jiten_frequency_map: AHashMap<FrequencyKey, usize> =
-            Self::parse_jiten_frequencies(&dependencies.jiten)?;
-        change_progress(
-            &progress,
-            "Parsing furigana data. \nThis may take a few minutes.",
-        );
-        let furigana_map: AHashMap<(&str, &str), Vec<Furigana>> =
-            Self::parse_jmdict_furigana(&dependencies.furigana)?;
 
-        change_progress(
-            &progress,
-            "Parsing dictionary data. \nThis may take a few minutes.",
-        );
-        let jmdict: JMDict = serde_json::from_str(&dependencies.simplified)?;
+        let (bccwj_res, jiten_res, furigana_res, jmdict_res) = std::thread::scope(|s| {
+            let jmdict_simplified_handle = s.spawn(|| {
+                tracing::debug!("Parsing jmdict-simplified.");
+
+                serde_json::from_str::<JMDict>(&dependencies.simplified).unwrap()
+            });
+
+            let bccwj_frequency_handle = s.spawn(|| {
+                tracing::debug!("Parsing bccwj-combined.");
+
+                Self::parse_bccwj_frequencies(&dependencies.bccwj).unwrap()
+            });
+
+            let jmdict_furigana_handle = s.spawn(|| {
+                tracing::debug!("Parsing jmdict-furigana.");
+
+                Self::parse_jmdict_furigana(&dependencies.furigana).unwrap()
+            });
+
+            let jiten_frequency_handle = s.spawn(|| {
+                tracing::debug!("Parsing jiten-moe.");
+
+                Self::parse_jiten_frequencies(&dependencies.jiten).unwrap()
+            });
+
+            change_progress(
+                &progress,
+                "Parsing datasets [1/4]. \nThis may take a few minutes.",
+            );
+            let jiten_res: AHashMap<FrequencyKey, usize> = jiten_frequency_handle
+                .join()
+                .map_err(|e| format!("Error while parsing jiten-moe: {:?}", e))
+                .unwrap();
+            tracing::debug!("jiten-moe successfully parsed.");
+            change_progress(
+                &progress,
+                "Parsing datasets [2/4]. \nThis may take a few minutes.",
+            );
+            let furigana_res: AHashMap<(&str, &str), Vec<Furigana>> = jmdict_furigana_handle
+                .join()
+                .map_err(|e| format!("Error while parsing jmdict-furigana: {:?}", e))
+                .unwrap();
+            tracing::debug!("jmdict-furigana successfully parsed.");
+            change_progress(
+                &progress,
+                "Parsing datasets [3/4]. \nThis may take a few minutes.",
+            );
+            let bccwj_res: AHashMap<FrequencyKey, usize> = bccwj_frequency_handle
+                .join()
+                .map_err(|e| format!("Error while parsing bccwj-combined: {:?}", e))
+                .unwrap();
+            tracing::debug!("bccwj-combined successfully parsed.");
+            change_progress(
+                &progress,
+                "Parsing datasets [4/4]. \nThis may take a few minutes.",
+            );
+
+            let jmdict_res: JMDict = jmdict_simplified_handle
+                .join()
+                .map_err(|e| format!("Error while parsing jmdict-simplified: {:?}", e))
+                .unwrap();
+            tracing::debug!("jmdict-simplified successfully parsed.");
+
+            Ok::<
+                (
+                    AHashMap<FrequencyKey, usize>,
+                    AHashMap<FrequencyKey, usize>,
+                    AHashMap<(&str, &str), Vec<Furigana>>,
+                    JMDict,
+                ),
+                Box<dyn Error>,
+            >((bccwj_res, jiten_res, furigana_res, jmdict_res))
+        })?;
+
+        let bccwj_frequency_map: AHashMap<FrequencyKey, usize> = bccwj_res;
+        let jiten_frequency_map: AHashMap<FrequencyKey, usize> = jiten_res;
+        let furigana_map: AHashMap<(&str, &str), Vec<Furigana>> = furigana_res;
+        let jmdict: JMDict = jmdict_res;
 
         change_progress(
             &progress,
@@ -636,7 +699,7 @@ impl Dictionary {
         entries_vec.into_par_iter().chunks(2000).for_each(|chunk| {
             let mut batch = sled::Batch::default();
 
-            for (key, mut entry) in chunk {
+            for (key, entry) in chunk {
                 let serialized_entry: Vec<u8> =
                     bincode::encode_to_vec(&entry, bincode::config::standard()).unwrap();
                 batch.insert(key.serialize(), serialized_entry);
