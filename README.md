@@ -10,7 +10,7 @@ The main difference to something like Yomitan is that the look-up is not restric
 > [!NOTE]\
 > Currently, the main focus of development is on **Linux** (X11 and Wayland). Basic **Windows** support is already there, however some features may or may not fully work until I get to it.
 
-These two videos showcase the popup dictionary being used to look up sentences and words by copying or screenshotting text in various applications:
+These two videos (slightly outdated) showcase the popup dictionary being used to look up sentences and words by copying or screenshotting text in various applications:
 
 https://github.com/user-attachments/assets/df14e686-d6c0-497a-87ff-5e320c2e02e2
 
@@ -18,13 +18,10 @@ https://github.com/user-attachments/assets/33a60c3a-f775-4ef4-99d8-dd7cbb0fe1f2
 
 ### Easy Usage Example
 There's two main ways you can easily use this as a popup dictionary similar to something like Yomitan:
-1. When you're about to e.g. read a book in Japanese, simply launch the binary/executable to open the application in watcher mode with a tray icon. In this mode, the application stays running in the background and waits for you to copy or screenshot any Japanese text. Everytime you do, the popup dictionary opens with that text as input. You can close the window and copy/screenshot new text as often as you like. Once you're done reading, simply exit the application via the tray icon.
-2. [WIP on Windows] Assign **keybindings** to the commands ``popup_dictionary --clipboard`` and/or ``hyprshot -m region -r -- | popup_dictionary --ocr`` (replacing ``hyprshot`` with your preferred screenshot tool). This way you can copy any Japanese text, then press your keybind to open it in the popup dictionary; or press the second keybind to screenshot any Japanese text and open it in the popup dictionary.
+1. When you're about to e.g. read a book in Japanese, simply launch the binary/executable to open the application in watcher mode. In this mode, the application stays running in the background and waits for you to copy or screenshot any Japanese text. Everytime you do, the popup dictionary opens with that text as input. You can close the window or keep it open and copy/screenshot new text as often as you like. Once you're done reading, simply exit the application via the tray icon. It is also possible to pause/unpause the watcher via the buttons in the app or the tray menu.
+2. [WIP on Windows] Assign **keybindings** to the commands ``popup_dictionary --clipboard`` and/or ``hyprshot -m region -r -- | popup_dictionary --ocr`` (replacing ``hyprshot`` with your preferred screenshot tool). This way you can copy any Japanese text, then press your keybind to open it in the popup dictionary; or press the second keybind to screenshot any Japanese text and open it.
 
 ### Plugins
-> [!NOTE]\
-> When first launching the application with the default plugin (Kihon), four datasets totalling around ~280MB are downloaded and a database generated under ``~/.local/share/popup_dictionary/`` (Linux) or ``%APPDATA%\popup_dictionary\`` (Windows). This may take a few minutes depending on your internet connection and device specifications.
-
 There are currently two "Plugins" you can use for looking up text, these correspond to the two tabs at the bottom of the popup window:
 - The **Kihon** plugin is the default when launching the application. It runs entirely locally on your machine (after the initial one-time dataset download) and uses a mix of hand-picked methods and dictionaries for tokenization and looking up words.
 - The **Jotoba** plugin uses the API of the website [jotoba.de](https://jotoba.de/) for both tokenization and looking up words. To use it, you need an active internet connection.
@@ -47,20 +44,20 @@ This is the default OCR engine the application tries to use. See the [Installati
 > When first using MangaOCR, three model files totalling around ~440MB are downloaded under ``~/.local/share/popup_dictionary/`` (Linux) or ``%APPDATA%\popup_dictionary\`` (Windows). This may take a few minutes depending on your internet connection and device specifications. There is currently no way to see the download progress, please wait a few minutes for the download to finish before the application window opens.
   
 The MangaOCR engine requires no manual installation.
-- **Pros:** MangaOCR is great at recognizing very short pieces of text (i.e. one sentence or less). It can handle stylized fonts, colors, etc. It can parse extremely tiny font sizes a little better than Tesseract.
+- **Pros:** MangaOCR is great at recognizing very short pieces of text (i.e. one sentence or less). It can handle stylized fonts, colors, etc. It can parse extremely tiny font sizes a little better than Tesseract. It is also better at parsing Japanese text with furigana.
 - **Cons:** MangaOCR takes up around ~400MB of RAM and is slower than Tesseract. It has a maximum image size of 224x224, so images/screenshots bigger than this get squished which reduces accuracy.
 
 ### Modes (Advanced Users)
-The program must be launched in exactly one of **six different modes**. When no mode is specified, the program defaults to ``watch`` mode with a tray icon. These modes determine how the popup dictionary receives the input text you would like to look up.
+The program must be launched in exactly one of **six different modes**. When no mode is specified, the program defaults to ``watch`` mode with ``--tray`` and ``--keep-open``. These modes determine how the popup dictionary receives the input text you would like to look up.
 You can choose a mode using one of the following arguments:
 - ``--text`` or ``-t``: Put some text after this argument (don't forget quotation marks if your text includes spaces) to pass it directly to the program.
-  - Example: ``popup_dictionary --text "太陽が属している銀河系では"``
+  - Example: ``popup_dictionary --text "予約より一日早く発ちます。"``
 - ``--primary`` or ``-p``: In this mode, any text that is currently in the **primary selection** is taken and passed to the program. This is **Linux-only** and may or may not work on Wayland depending on your compositor. The primary selection usually contains any text you have **currently highlighted** (e.g. with your mouse).
 - ``--secondary`` or ``-s``: In this mode, any text that is currently in the **secondary selection** is taken and passed to the program. This is **X11-only** and is rarely implemented/used.
 - ``--clipboard`` or ``-b``: In this mode, any text that is currently in your **main clipboard** is taken and passed to the program. This uses what you would usually call the "clipboard" on any OS.
 - ``--ocr`` or ``-o``: In this mode, an OCR engine (``tesseract`` by default) is used to parse text from an input image. You can either specify the **path to an image file** after this argument, or you can pipe in **raw image data** from ``stdin``.
   - Example: ``popup_dictionary --ocr ~/Pictures/japanese_text.png`` or ``hyprshot -m region -r -- | popup_dictionary --ocr``
-- ``--watch`` or ``-w``: In this mode, the program stays running in the background and waits for any **valid text** or **raw image data** to enter the **main clipboard**. When either of those is detected, the popup dictionary window opens using either the text as input or running OCR mode on the image. If the popup dictionary window is then closed again, the program stays running in the background and waiting for new valid clipboard content. Specifying the option ``--tray`` can be useful in this mode, as this allows you to easily end the background process via the tray icon.
+- ``--watch`` or ``-w``: In this mode, the program stays running in the background and waits for any **valid text** or **raw image data** to enter the **main clipboard**. When either of those is detected, the popup dictionary window opens using either the text as input or running OCR mode on the image. The program stays running in the background even when the window is closed and waits for new valid clipboard content. Specifying the option ``--tray`` can be useful in this mode, as this allows you to easily end the background process via the tray icon. If the option ``--keep-open`` is specified, the watcher will update the input text even while the window is still open.
 
 ## Installation
 ### Linux
@@ -154,12 +151,13 @@ Contributions welcome!
 This project is licensed under the **GNU General Public License v3.0**.
 
 Upon first use of the ``Kihon`` plugin, the following datasets are downloaded and are the property of their respective owners:
- - **JMdict-Simplified:** A JSON conversion of the JMdict dictionary files provided by [**scriptin/jmdict-simplified**](https://github.com/scriptin/jmdict-simplified) (specifically [jmdict-eng-3.6.2+20260202123847](https://github.com/scriptin/jmdict-simplified/releases/download/3.6.2%2B20260202123847/jmdict-eng-3.6.2+20260202123847.json.tgz)) under the **CC BY-SA 4.0 License**.
- - **JmdictFurigana:** Furigana data for the JMdict provided by [**Doublevil/JmdictFurigana**](https://github.com/Doublevil/JmdictFurigana) (specifically [2.3.1+2026-01-25](https://github.com/Doublevil/JmdictFurigana/releases/download/2.3.1%2B2026-01-25/JmdictFurigana.json)) under the **MIT License**.
+ - **JMdict-Simplified:** A JSON conversion of the JMdict dictionary files provided by [**scriptin/jmdict-simplified**](https://github.com/scriptin/jmdict-simplified) under the [**CC BY-SA 4.0 License**](https://creativecommons.org/licenses/by-sa/4.0/).
+ - **JmdictFurigana:** Furigana data for the JMdict provided by [**Doublevil/JmdictFurigana**](https://github.com/Doublevil/JmdictFurigana) under the **MIT License**.
    - **JMdict:** The original JMdict XML files are property of the **Electronic Dictionary Research and Development Group**, used in accordance with the [**EDRDG Licence**](https://www.edrdg.org/edrdg/licence.html).
 
- - **Word Frequencies:** A list of Japanese words by frequency provided by [**hingston/japanese**](https://github.com/hingston/japanese) (specifically [44492-japanese-words-latin-lines-removed](https://github.com/hingston/japanese/blob/78a5f64e872e4a2ad430adfd124c98f5f0a1619b/44492-japanese-words-latin-lines-removed.txt)).
-   - **University of Leeds Corpus:** The word frequencies are based on the [**University of Leeds Corpus**](https://web.archive.org/web/20230924010025/http://corpus.leeds.ac.uk/frqc/internet-jp.num), used in accordance with the **CC BY-SA 2.5 License**.
+ - **Word Frequencies:** The BCCWJ SUW and BCCWJ LUW combined provided by [**Kuuuube/yomitan-dictionaries**](https://github.com/Kuuuube/yomitan-dictionaries) and the [**Jiten Frequency List**](https://jiten.moe/other).
+   - **Balanced Corpus of Contemporary Written Japanese (BCCWJ):** The combined version is based on the SUW and LUW Frequency Lists by the [**National Institute for Japanese Language and Linguistics**](https://clrd.ninjal.ac.jp/bccwj/en/freq-list.html).
+   - **Jiten:** The [**Jiten.moe**](https://jiten.moe/) Frequency Lists by [**Sirush**](https://github.com/Sirush), used in accordance with the [**CC BY-SA 4.0 License**](https://creativecommons.org/licenses/by-sa/4.0/). For proper version control, [**my repository**](https://github.com/jasmine-blush/jiten-moe-frequency) is used for the actual dependency download.
 
 When using the ``Kihon`` plugin, the following is used:
  - **Vibrato:** The Vibrato tokenizer provided by [**daac-tools/vibrato**](https://github.com/daac-tools/vibrato) under the **MIT License**. For tokenization the [jumandic-mecab-7_0](https://github.com/daac-tools/vibrato/releases/download/v0.5.0/jumandic-mecab-7_0.tar.xz) file is downloaded (if not already present).
