@@ -179,7 +179,7 @@ struct FrequencyKey<'c> {
     reading: &'c str,
 }
 
-const DB_VERSION_FLAG: &str = "db_version_004";
+const DB_VERSION_FLAG: &str = "db_version_005";
 
 impl Dictionary {
     pub fn load_dictionary(
@@ -290,28 +290,44 @@ impl Dictionary {
         let jmdict_simplified_handle = std::thread::spawn(|| {
             tracing::debug!("Downloading jmdict-simplified.");
 
-            crate::plugins::kihon_plugin::dependencies::get_jmdict_simplified().unwrap()
+            let result = crate::plugins::kihon_plugin::dependencies::get_jmdict_simplified();
+            if let Err(ref e) = result {
+                tracing::error!("{}", e);
+            }
+            result.unwrap()
         });
 
         // term_meta_bank_1.json
         let bccwj_frequency_handle = std::thread::spawn(|| {
             tracing::debug!("Downloading bccwj-combined.");
 
-            crate::plugins::kihon_plugin::dependencies::get_bccwj_combined().unwrap()
+            let result = crate::plugins::kihon_plugin::dependencies::get_bccwj_combined();
+            if let Err(ref e) = result {
+                tracing::error!("{}", e);
+            }
+            result.unwrap()
         });
 
         // jmdict-furigana.json
         let jmdict_furigana_handle = std::thread::spawn(|| {
             tracing::debug!("Downloading jmdict-furigana.");
 
-            crate::plugins::kihon_plugin::dependencies::get_jmdict_furigana().unwrap()
+            let result = crate::plugins::kihon_plugin::dependencies::get_jmdict_furigana();
+            if let Err(ref e) = result {
+                tracing::error!("{}", e);
+            }
+            result.unwrap()
         });
 
         // frequency_list_global.csv
         let jiten_frequency_handle = std::thread::spawn(|| {
             tracing::debug!("Downloading jiten-moe.");
 
-            crate::plugins::kihon_plugin::dependencies::get_jiten_moe().unwrap()
+            let result = crate::plugins::kihon_plugin::dependencies::get_jiten_moe();
+            if let Err(ref e) = result {
+                tracing::error!("{}", e);
+            }
+            result.unwrap()
         });
 
         change_progress(
@@ -320,7 +336,7 @@ impl Dictionary {
         );
         let jiten_frequency = jiten_frequency_handle
             .join()
-            .map_err(|e| format!("Could not download jiten-moe: {:?}", e))?;
+            .map_err(|e| format!("Could not download jiten-moe"))?;
         tracing::debug!("jiten-moe successfully downloaded.");
         change_progress(
             progress,
@@ -328,7 +344,7 @@ impl Dictionary {
         );
         let jmdict_furigana = jmdict_furigana_handle
             .join()
-            .map_err(|e| format!("Could not download jmdict-furigana: {:?}", e))?;
+            .map_err(|e| format!("Could not download jmdict-furigana"))?;
         tracing::debug!("jmdict-furigana successfully downloaded.");
         change_progress(
             progress,
@@ -336,7 +352,7 @@ impl Dictionary {
         );
         let bccwj_frequency = bccwj_frequency_handle
             .join()
-            .map_err(|e| format!("Could not download bccwj-combined: {:?}", e))?;
+            .map_err(|e| format!("Could not download bccwj-combined"))?;
         tracing::debug!("bccwj-combined successfully downloaded.");
         change_progress(
             progress,
@@ -344,7 +360,7 @@ impl Dictionary {
         );
         let jmdict_simplified = jmdict_simplified_handle
             .join()
-            .map_err(|e| format!("Could not download jmdict-simplified: {:?}", e))?;
+            .map_err(|e| format!("Could not download jmdict-simplified"))?;
         tracing::debug!("jmdict-simplified successfully downloaded.");
 
         Ok(Dependencies {
