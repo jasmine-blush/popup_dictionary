@@ -11,6 +11,22 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+---
+
+## [0.3.0] - 2026-04-30
+
+### Added
+
 - **Jotoba:** Furigana, tags and extra information to definitions.
 - **Core:** A Nix flake including a dev environment by @IamTheCarl in https://github.com/jasmine-blush/popup_dictionary/pull/1.
 - **Core:** File integrity verification using SHA256 after dependency download
@@ -56,8 +72,6 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
   (kanji/kana) as the main term. In cases where the main term differs from the
   input word but one of the "Other forms" matches it, that form is underlined.
 
-### Deprecated
-
 ### Removed
 
 - **Kihon:** The University of Leeds Corpus frequency dataset.
@@ -67,8 +81,6 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **Kihon:** Some alignment text being selectable that is meant to be invisible.
 - **UI:** The vertical scroll position in the definitions panel does not carry
   over to every word anymore but is remembered separately for each one.
-
-### Security
 
 ---
 
@@ -159,7 +171,8 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ---
 
-[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.1...HEAD
+[unreleased]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jasmine-blush/popup_dictionary/compare/v0.1.0...v0.1.1
