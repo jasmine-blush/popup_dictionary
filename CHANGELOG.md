@@ -11,6 +11,9 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 ### Added
 
+- **Mozhi:** A new translation plugin using Mozhi to display translations of the
+  input text by multiple different translation engines.
+
 ### Changed
 
 ### Deprecated
