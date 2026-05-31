@@ -235,7 +235,7 @@ impl JotobaPlugin {
 
     fn build_sanitized_url(&self) -> Result<String, Box<dyn Error>> {
         let mut url =
-            reqwest::Url::parse_with_params("https://jotoba.de/search/0/", &[("l", "en-US")])
+            reqwest::Url::parse_with_params("https://jotoba.de/search/0", &[("l", "en-US")])
                 .map_err(|e| e.to_string())?;
 
         url.path_segments_mut()

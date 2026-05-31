@@ -18,17 +18,19 @@ pub trait Plugin: Send + 'static {
 pub enum Plugins {
     Kihon,
     Jotoba,
+    Mozhi,
 }
 
 impl Plugins {
     pub fn all() -> Vec<Self> {
-        vec![Plugins::Kihon, Plugins::Jotoba]
+        vec![Plugins::Kihon, Plugins::Jotoba, Plugins::Mozhi]
     }
 
     pub fn name(&self) -> &'static str {
         match self {
             Plugins::Kihon => "kihon",
             Plugins::Jotoba => "jotoba",
+            Plugins::Mozhi => "mozhi",
         }
     }
 
@@ -43,6 +45,11 @@ impl Plugins {
             ),
             Plugins::Jotoba => Box::new(
                 crate::plugins::jotoba_plugin::jotoba_plugin::JotobaPlugin::load_plugin(
+                    sentence, progress,
+                ),
+            ),
+            Plugins::Mozhi => Box::new(
+                crate::plugins::mozhi_plugin::mozhi_plugin::MozhiPlugin::load_plugin(
                     sentence, progress,
                 ),
             ),

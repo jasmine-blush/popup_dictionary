@@ -64,7 +64,7 @@ struct Modes {
 #[derive(clap::Args, Debug)]
 #[group(required = false, multiple = true)]
 struct Options {
-    /// Initial plugin to load. Available: "kihon", "jotoba"
+    /// Initial plugin to load. Available: "kihon", "jotoba", "mozhi"
     #[arg(long = "initial-plugin", value_name = "PLUGIN", help_heading = None)]
     initial_plugin: Option<String>,
 
