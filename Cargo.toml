@@ -45,7 +45,7 @@ clap = { version = "4.5.53", features = ["derive"] }     # cli
 enigo = "0.6.1"                                          # cursor pos and display size for windowing 
 hyprland = { version = "0.4.0-beta.3", optional = true } # hyprland interaction for windowing
 arboard = "3.6.1"                                        # clipboard
-x11rb = "0.13.2"                                         # x11 connection for windowing
+x11rb = "0.14.0"                                         # x11 connection for windowing
 image = "0.25.9"                                         # ocr, tray icon
 tokio = "1.49.0"                                         # tray icon background thread
 regex = "1.12.2"                                         # input text japanese check
