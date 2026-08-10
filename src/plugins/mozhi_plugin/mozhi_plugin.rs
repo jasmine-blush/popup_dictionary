@@ -44,7 +44,7 @@ impl Plugin for MozhiPlugin {
         &self.tokens
     }
 
-    fn display_token(&self, ctx: &Context, frame: &Frame, app: &MyApp, ui: &mut Ui, token: &Token) {
+    fn display_token(&self, ui: &mut Ui, frame: &Frame, app: &MyApp, token: &Token) {
         for translation in &self.translations {
             ui.add_space(app::SPACING_SIZE);
 

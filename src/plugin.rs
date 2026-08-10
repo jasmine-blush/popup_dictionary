@@ -10,7 +10,7 @@ pub trait Plugin: Send + 'static {
     where
         Self: Sized;
     fn get_tokens(&self) -> &Vec<Token>;
-    fn display_token(&self, ctx: &Context, frame: &Frame, app: &MyApp, ui: &mut Ui, token: &Token);
+    fn display_token(&self, ui: &mut Ui, frame: &Frame, app: &MyApp, token: &Token);
     fn open(&self, ctx: &Context);
 }
 

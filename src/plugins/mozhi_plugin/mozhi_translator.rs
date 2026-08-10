@@ -39,7 +39,7 @@ pub fn translate(sentence: &str) -> Result<Vec<Translation>, Box<dyn Error>> {
     let mut translations: Vec<Translation> = Vec::new();
     if let Ok(response) = query_translations(&mut easy, sentence) {
         for engine_translation in response {
-            if (!engine_translation.translated_text.is_empty()) {
+            if !engine_translation.translated_text.is_empty() {
                 translations.push(Translation {
                     engine: ENGINES
                         .get(&engine_translation.engine)

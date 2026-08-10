@@ -44,7 +44,7 @@ impl Plugin for JotobaPlugin {
         &self.tokens
     }
 
-    fn display_token(&self, ctx: &Context, frame: &Frame, app: &MyApp, ui: &mut Ui, token: &Token) {
+    fn display_token(&self, ui: &mut Ui, frame: &Frame, app: &MyApp, token: &Token) {
         if token.is_valid() {
             match self.jotoba_tokenizer.borrow_mut().get_response(token) {
                 Ok(response) => {

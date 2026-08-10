@@ -1,8 +1,11 @@
 use eframe::{NativeOptions, egui};
-use egui::{Color32, Context, CornerRadius, Pos2, Rect, RichText};
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+use egui::{Color32, CornerRadius, FontId, Pos2, Rect, RichText, TextStyle, Ui};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use crate::plugin::{Plugin, Plugins, Token};
@@ -294,7 +297,7 @@ impl MyApp {
         self.active_plugin_index = plugin_index;
     }
 
-    fn set_theme(&mut self, ctx: &Context) {
+    fn set_theme(&mut self, ui: &mut Ui) {
         let mut visuals = egui::Visuals::dark();
         visuals.override_text_color = Some(PRIMARY_TEXT_COLOR);
         visuals.window_fill = PRIMARY_BACKGROUND_COLOR;
@@ -303,9 +306,9 @@ impl MyApp {
         visuals.window_shadow = egui::Shadow::NONE;
         visuals.window_stroke = egui::Stroke::NONE;
         visuals.indent_has_left_vline = false;
-        ctx.set_visuals(visuals);
+        ui.set_visuals(visuals);
 
-        let mut spacing = ctx.style().spacing.clone();
+        let mut spacing = ui.style().spacing.clone();
         spacing.button_padding = egui::vec2(2.0, 2.0);
         spacing.icon_spacing = 2.0;
         spacing.item_spacing = egui::vec2(4.0, 4.0);
@@ -317,10 +320,9 @@ impl MyApp {
             top: 2,
             bottom: 2,
         };
-        ctx.style_mut(|style| style.spacing = spacing);
+        ui.style_mut().spacing = spacing;
 
-        let mut style = (*ctx.style()).clone();
-        style.text_styles = [
+        let text_styles = Into::<BTreeMap<TextStyle, FontId>>::into([
             (
                 egui::TextStyle::Heading,
                 egui::FontId::new(BIG_TEXT_SIZE, egui::FontFamily::Proportional),
@@ -337,9 +339,8 @@ impl MyApp {
                 egui::TextStyle::Small,
                 egui::FontId::new(SMALL_TEXT_SIZE, egui::FontFamily::Proportional),
             ),
-        ]
-        .into();
-        ctx.set_style(style);
+        ]);
+        ui.style_mut().text_styles = text_styles;
 
         self.main_frame = Some(egui::containers::Frame {
             corner_radius: CornerRadius::ZERO,
@@ -447,7 +448,7 @@ impl MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         if let Some(init_pos) = self.init_pos {
             #[cfg(feature = "hyprland-support")]
             if self.is_hyprland {
@@ -473,12 +474,12 @@ impl eframe::App for MyApp {
         }
 
         if !self.theme_is_set {
-            self.set_theme(ctx);
+            self.set_theme(ui);
             self.theme_is_set = true;
 
             // theme_is_set basically acts like "just on first frame".
             // set window to focused on first frame (Windows)
-            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            ui.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
 
         let main_frame = self.main_frame.unwrap();
@@ -486,7 +487,7 @@ impl eframe::App for MyApp {
         // Check if watcher has new sentence in keep_open mode
         let mut new_sentence: Option<String> = None;
         if let Some(mutex) = &self.new_sentence_mutex {
-            ctx.request_repaint_after(std::time::Duration::from_millis(167));
+            ui.request_repaint_after(std::time::Duration::from_millis(167));
 
             if let Ok(mut lock) = mutex.try_lock() {
                 if let Some(sentence) = lock.take() {
@@ -507,7 +508,7 @@ impl eframe::App for MyApp {
 
         egui::CentralPanel::default()
             .frame(main_frame)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 let footer_height = 42.0;
 
                 let curr_sentence: String = String::from(&self.sentence);
@@ -694,10 +695,9 @@ impl eframe::App for MyApp {
                             .auto_shrink(false)
                             .show(ui, |ui| {
                                 plugin.display_token(
-                                    ctx,
+                                    ui,
                                     &main_frame,
                                     self,
-                                    ui,
                                     &tokens[selected_token_idx],
                                 );
                             });
@@ -833,7 +833,7 @@ impl eframe::App for MyApp {
                                 if let PluginState::Ready(plugin) =
                                     &(*self.plugin_state.lock().unwrap())
                                 {
-                                    plugin.open(ctx);
+                                    plugin.open(ui);
                                 }
                             }
 
