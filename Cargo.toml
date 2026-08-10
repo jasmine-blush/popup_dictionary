@@ -57,7 +57,7 @@ ksni = "0.3.3"
 
 [target.'cfg(windows)'.dependencies]
 # tray icon
-tray-icon = "0.21.3"
+tray-icon = "0.24.2"
 windows-sys = { version = "0.61.2", features = [
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_Console",
