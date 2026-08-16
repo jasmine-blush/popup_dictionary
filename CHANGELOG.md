@@ -13,8 +13,18 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 
 - **Mozhi:** A new translation plugin using Mozhi to display translations of the
   input text by multiple different translation engines.
+- **Core/UI:** A generic plugin that can be used to display specific plugins in
+  a standardized way.
+- **UI:** Added a button which allows adding a specific definition as a card/note
+  to Anki. The feature is currently extremely basic and experimental.
 
 ### Changed
+
+- **Core:** Bumped up the version of various important crates. This may have
+  a noticeable effect on how the app looks and behaves.
+- **Kihon:** The Kihon plugin now uses the generic plugin in the background.
+  This should not affect looks or behavior but helps keep other plugins in line
+  with Kihon's look and functionality.
 
 ### Deprecated
 

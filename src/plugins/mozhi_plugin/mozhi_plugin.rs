@@ -15,7 +15,7 @@ use crate::plugin::change_progress;
 use crate::plugins::mozhi_plugin::mozhi_translator::Translation;
 
 pub struct MozhiPlugin {
-    tokens: Vec<Token>,
+    tokens: Box<[Token]>,
     translations: Vec<Translation>,
 }
 
@@ -29,7 +29,8 @@ impl Plugin for MozhiPlugin {
                     deinflected_word: sentence.to_owned(),
                     conjugations: Vec::new(),
                     validity: Validity::VALID,
-                }],
+                }]
+                .into_boxed_slice(),
                 translations,
             },
             Err(e) => {
@@ -40,38 +41,52 @@ impl Plugin for MozhiPlugin {
         }
     }
 
-    fn get_tokens(&self) -> &Vec<Token> {
+    fn get_tokens(&self) -> &[Token] {
         &self.tokens
     }
 
-    fn display_token(&self, ui: &mut Ui, frame: &Frame, app: &MyApp, token: &Token) {
-        for translation in &self.translations {
-            ui.add_space(app::SPACING_SIZE);
+    fn select(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
 
-            Self::display_tag(
-                ui,
-                &translation.engine,
-                "Response from this Translation Engine",
-            );
-            ui.add_space(app::SPACING_SIZE * 0.5);
-            ui.label(RichText::new(translation.translation.clone()).small());
+    fn get_selected(&self) -> Option<&Token> {
+        self.tokens.get(0)
+    }
 
-            ui.add_space(app::SPACING_SIZE * 0.5);
+    fn get_selected_idx(&self) -> Option<usize> {
+        Some(0)
+    }
 
-            let percent: f32 = 0.8;
-            let width: f32 = ui.available_width() * percent;
-            let margin: f32 = (ui.available_width() - width) / 2.0;
+    fn display_selected(&self, ui: &mut Ui, frame: &Frame, app: &MyApp) {
+        if let Some(token) = self.get_selected() {
+            for translation in &self.translations {
+                ui.add_space(app::SPACING_SIZE);
 
-            ui.horizontal(|ui| {
-                ui.add_space(margin);
-                let rect: egui::Rect = ui.allocate_space(egui::vec2(width, 1.0)).1;
-                ui.painter().line_segment(
-                    [rect.left_center(), rect.right_center()],
-                    egui::Stroke::new(1.0, Color32::from_rgba_premultiplied(20, 20, 20, 20)),
+                Self::display_tag(
+                    ui,
+                    &translation.engine,
+                    "Response from this Translation Engine",
                 );
-            });
+                ui.add_space(app::SPACING_SIZE * 0.5);
+                ui.label(RichText::new(translation.translation.clone()).small());
 
-            ui.add_space(app::SPACING_SIZE * 0.5);
+                ui.add_space(app::SPACING_SIZE * 0.5);
+
+                let percent: f32 = 0.8;
+                let width: f32 = ui.available_width() * percent;
+                let margin: f32 = (ui.available_width() - width) / 2.0;
+
+                ui.horizontal(|ui| {
+                    ui.add_space(margin);
+                    let rect: egui::Rect = ui.allocate_space(egui::vec2(width, 1.0)).1;
+                    ui.painter().line_segment(
+                        [rect.left_center(), rect.right_center()],
+                        egui::Stroke::new(1.0, Color32::from_rgba_premultiplied(20, 20, 20, 20)),
+                    );
+                });
+
+                ui.add_space(app::SPACING_SIZE * 0.5);
+            }
         }
     }
 

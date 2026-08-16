@@ -1,5 +1,6 @@
 use egui::containers::Frame;
 use egui::{Context, Ui};
+use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -9,8 +10,11 @@ pub trait Plugin: Send + 'static {
     fn load_plugin(sentence: &str, progress: Arc<Mutex<String>>) -> Self
     where
         Self: Sized;
-    fn get_tokens(&self) -> &Vec<Token>;
-    fn display_token(&self, ui: &mut Ui, frame: &Frame, app: &MyApp, token: &Token);
+    fn get_tokens(&self) -> &[Token];
+    fn select(&mut self, index: usize) -> Result<(), Box<dyn Error>>;
+    fn get_selected(&self) -> Option<&Token>;
+    fn get_selected_idx(&self) -> Option<usize>;
+    fn display_selected(&self, ui: &mut Ui, frame: &Frame, app: &MyApp);
     fn open(&self, ctx: &Context);
 }
 
@@ -66,14 +70,14 @@ impl Plugins {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Validity {
     VALID,
     INVALID,
     UNKNOWN,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Token {
     pub input_word: String,        // term as input by user (surface)
     pub deinflected_word: String,  // deinflected surface as given by tokenizer (base)

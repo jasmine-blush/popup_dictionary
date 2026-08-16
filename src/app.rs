@@ -364,15 +364,21 @@ impl MyApp {
 
     fn display_token_header(
         ui: &mut egui::Ui,
-        tokens: &Vec<Token>,
-        selected_token_idx: usize,
+        tokens: &[Token],
+        selected_token_idx: Option<usize>,
     ) -> Option<usize> {
+        let has_selected = selected_token_idx.is_some();
+        let selected_token_idx = match selected_token_idx {
+            Some(idx) => idx,
+            None => 0,
+        };
+
         let mut clicked_index = None;
         for (idx, token) in tokens.iter().enumerate() {
             let mut label_text: RichText = RichText::new(&token.input_word).size(PRIMARY_TEXT_SIZE);
             if token.is_valid() {
                 label_text = label_text.underline();
-                if idx != selected_token_idx {
+                if has_selected && idx != selected_token_idx {
                     label_text = label_text.color(SECONDARY_TEXT_COLOR);
                 }
 
@@ -417,12 +423,13 @@ impl MyApp {
         return clicked_index;
     }
 
-    pub fn copy_text_safe(&self, text: String) {
+    pub fn copy_text_safe(&self, text: &str) {
         let mut was_paused = true;
         let paused_clone = match &self.paused {
             Some(paused) => Some(paused.clone()),
             None => None,
         };
+        let text = text.to_owned();
         std::thread::spawn(move || {
             if let Some(paused) = &paused_clone {
                 was_paused = paused.load(Ordering::Relaxed);
@@ -512,13 +519,12 @@ impl eframe::App for MyApp {
                 let footer_height = 42.0;
 
                 let curr_sentence: String = String::from(&self.sentence);
-                match &(*self.plugin_state.lock().unwrap()) {
+                match &mut *self.plugin_state.lock().unwrap() {
                     PluginState::Ready(plugin) => {
-                        let tokens: &Vec<Token> = plugin.get_tokens();
-
-                        if self.selected_token_index.is_none() {
+                        if plugin.get_selected().is_none() {
                             let mut first_valid_idx: usize = 0;
                             let mut curr_idx: usize = 0;
+                            let tokens: &[Token] = plugin.get_tokens();
                             while curr_idx < tokens.len() {
                                 if tokens[curr_idx].is_valid() {
                                     first_valid_idx = curr_idx;
@@ -526,9 +532,9 @@ impl eframe::App for MyApp {
                                 }
                                 curr_idx += 1;
                             }
-                            self.selected_token_index = Some(first_valid_idx);
+                            _ = plugin.select(first_valid_idx);
                         }
-                        let selected_token_idx: usize = self.selected_token_index.unwrap();
+                        let selected_token_idx: Option<usize> = plugin.get_selected_idx();
 
                         ui.vertical(|ui| {
                             ui.horizontal(|ui| {
@@ -568,12 +574,11 @@ impl eframe::App for MyApp {
                                                                 if let Some(idx) =
                                                                     Self::display_token_header(
                                                                         ui,
-                                                                        tokens,
+                                                                        plugin.get_tokens(),
                                                                         selected_token_idx,
                                                                     )
                                                                 {
-                                                                    self.selected_token_index =
-                                                                        Some(idx);
+                                                                    _ = plugin.select(idx);
                                                                 }
                                                             });
                                                         }
@@ -605,12 +610,11 @@ impl eframe::App for MyApp {
                                                                 if let Some(idx) =
                                                                     Self::display_token_header(
                                                                         ui,
-                                                                        tokens,
+                                                                        plugin.get_tokens(),
                                                                         selected_token_idx,
                                                                     )
                                                                 {
-                                                                    self.selected_token_index =
-                                                                        Some(idx);
+                                                                    _ = plugin.select(idx);
                                                                 }
                                                             });
                                                         }
@@ -694,12 +698,7 @@ impl eframe::App for MyApp {
                             .max_height(center_height)
                             .auto_shrink(false)
                             .show(ui, |ui| {
-                                plugin.display_token(
-                                    ui,
-                                    &main_frame,
-                                    self,
-                                    &tokens[selected_token_idx],
-                                );
+                                plugin.display_selected(ui, &main_frame, self);
                             });
                     }
                     PluginState::Loading(progress) => {

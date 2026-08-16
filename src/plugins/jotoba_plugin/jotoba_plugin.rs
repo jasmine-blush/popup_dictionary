@@ -19,7 +19,8 @@ use crate::plugins::jotoba_plugin::jotoba_tokenizer::JotobaTokenizer;
 use crate::plugins::jotoba_plugin::jotoba_tokenizer::PartOfSpeech;
 
 pub struct JotobaPlugin {
-    tokens: Vec<Token>,
+    tokens: Box<[Token]>,
+    selected_token: Option<usize>,
     jotoba_tokenizer: RefCell<JotobaTokenizer>, // TODO: REMOVE THIS REFCELL WHEN POSSIBLE
 }
 
@@ -29,7 +30,8 @@ impl Plugin for JotobaPlugin {
         change_progress(&progress, "Tokenizing...");
         match jotoba_tokenizer.tokenize(sentence) {
             Ok(tokens) => Self {
-                tokens,
+                tokens: tokens.into_boxed_slice(),
+                selected_token: None,
                 jotoba_tokenizer: RefCell::from(jotoba_tokenizer),
             },
             Err(e) => {
@@ -40,173 +42,199 @@ impl Plugin for JotobaPlugin {
         }
     }
 
-    fn get_tokens(&self) -> &Vec<Token> {
+    fn get_tokens(&self) -> &[Token] {
         &self.tokens
     }
 
-    fn display_token(&self, ui: &mut Ui, frame: &Frame, app: &MyApp, token: &Token) {
-        if token.is_valid() {
-            match self.jotoba_tokenizer.borrow_mut().get_response(token) {
-                Ok(response) => {
-                    /*
-                    egui::TopBottomPanel::bottom("jotoba_footer")
-                        .show_separator_line(false)
-                        .frame(*frame)
-                        .show(ctx, |ui| {
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.button(RichText::new("Open").size(20.0)).clicked() {
-                                    ctx.open_url(egui::output::OpenUrl {
-                                        url: format!(
-                                            "https://jotoba.de/search/0/{}?l=en-US",
-                                            self.get_sentence_string()
-                                        ),
-                                        new_tab: true,
-                                    });
-                                }
-                            });
-                        });
-                    */
-                    /*
-                    egui::ScrollArea::vertical()
-                        .auto_shrink(false)
-                        .show(ui, |ui| {*/
-                    for word in &response.words {
-                        if let Some(furigana) = &word.reading.furigana {
-                            Self::display_furigana(ui, &furigana.furigana);
-                        } else {
-                            if let Some(kanji) = &word.reading.kanji {
-                                tracing::warn!(
-                                    "Kanji {} without furigana in Jotoba response.",
-                                    kanji
-                                );
-                                ui.label(RichText::new(kanji).heading()); //.size(22.0));
-                            } else {
-                                ui.label(
-                                    RichText::new(&word.reading.kana).heading(), //.size(22.0)
-                                );
-                            }
-                        }
+    fn select(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
+        if self.tokens.len() > index {
+            self.selected_token = Some(index);
+            return Ok(());
+        }
+        Err(Box::from(format!(
+            "Could not select the token at index {} as that index is out of range.",
+            index
+        )))
+    }
 
+    fn get_selected(&self) -> Option<&Token> {
+        if let Some(index) = self.selected_token {
+            return self.tokens.get(index);
+        }
+        None
+    }
+
+    fn get_selected_idx(&self) -> Option<usize> {
+        self.selected_token
+    }
+
+    fn display_selected(&self, ui: &mut Ui, frame: &Frame, app: &MyApp) {
+        if let Some(token) = self.get_selected() {
+            if token.is_valid() {
+                match self.jotoba_tokenizer.borrow_mut().get_response(token) {
+                    Ok(response) => {
                         /*
-                        let mut count: u32 = 1;
-                        for sense in &word.senses {
-                            ui.label(
-                                RichText::new(format!("{}. {}", count, sense.glosses.join(", ")))
-                                    .small(),
-                            );
-                            count += 1;
-                        }*/
+                        egui::TopBottomPanel::bottom("jotoba_footer")
+                            .show_separator_line(false)
+                            .frame(*frame)
+                            .show(ctx, |ui| {
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if ui.button(RichText::new("Open").size(20.0)).clicked() {
+                                        ctx.open_url(egui::output::OpenUrl {
+                                            url: format!(
+                                                "https://jotoba.de/search/0/{}?l=en-US",
+                                                self.get_sentence_string()
+                                            ),
+                                            new_tab: true,
+                                        });
+                                    }
+                                });
+                            });
+                        */
+                        /*
+                        egui::ScrollArea::vertical()
+                            .auto_shrink(false)
+                            .show(ui, |ui| {*/
+                        for word in &response.words {
+                            if let Some(furigana) = &word.reading.furigana {
+                                Self::display_furigana(ui, &furigana.furigana);
+                            } else {
+                                if let Some(kanji) = &word.reading.kanji {
+                                    tracing::warn!(
+                                        "Kanji {} without furigana in Jotoba response.",
+                                        kanji
+                                    );
+                                    ui.label(RichText::new(kanji).heading()); //.size(22.0));
+                                } else {
+                                    ui.label(
+                                        RichText::new(&word.reading.kana).heading(), //.size(22.0)
+                                    );
+                                }
+                            }
 
-                        let mut count: u32 = 0;
-                        let mut last_tags: Vec<PartOfSpeech> = Vec::new();
-                        for sense in &word.senses {
-                            let tags: Vec<PartOfSpeech> = match &sense.pos {
-                                Some(tags) => tags.clone(),
-                                None => Vec::new(),
-                            };
-                            if tags != last_tags {
-                                last_tags = tags.clone();
-                                if count > 0 {
-                                    ui.add_space(app::SPACING_SIZE);
+                            /*
+                            let mut count: u32 = 1;
+                            for sense in &word.senses {
+                                ui.label(
+                                    RichText::new(format!("{}. {}", count, sense.glosses.join(", ")))
+                                        .small(),
+                                );
+                                count += 1;
+                            }*/
+
+                            let mut count: u32 = 0;
+                            let mut last_tags: Vec<PartOfSpeech> = Vec::new();
+                            for sense in &word.senses {
+                                let tags: Vec<PartOfSpeech> = match &sense.pos {
+                                    Some(tags) => tags.clone(),
+                                    None => Vec::new(),
+                                };
+                                if tags != last_tags {
+                                    last_tags = tags.clone();
+                                    if count > 0 {
+                                        ui.add_space(app::SPACING_SIZE);
+                                        count = 1;
+                                    }
+                                    //ui.add_space(app::SPACING_SIZE * 0.5);
+                                    Self::display_tags(ui, &tags);
+                                }
+                                if count == 0 {
                                     count = 1;
                                 }
-                                //ui.add_space(app::SPACING_SIZE * 0.5);
-                                Self::display_tags(ui, &tags);
-                            }
-                            if count == 0 {
-                                count = 1;
+
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(
+                                        RichText::new(format!("{}.", count))
+                                            .small()
+                                            .color(app::SECONDARY_TEXT_COLOR),
+                                    );
+                                    ui.label(
+                                        RichText::new(format!("{}", sense.glosses.join(", ")))
+                                            .small(),
+                                    );
+                                });
+
+                                let mut info: Vec<String> = Vec::new();
+                                if let Some(misc) = &sense.misc {
+                                    // Turn from CamelCase into regular sentence
+                                    let mut misc_readable = String::new();
+                                    for c in misc.chars() {
+                                        if misc_readable.is_empty() {
+                                            misc_readable.push(c);
+                                        } else {
+                                            if c.is_uppercase() {
+                                                misc_readable.push(' ');
+                                                misc_readable.push_str(
+                                                    &c.to_lowercase().collect::<String>(),
+                                                );
+                                            } else {
+                                                misc_readable.push(c);
+                                            }
+                                        }
+                                    }
+                                    info.push(misc_readable);
+                                }
+                                if let Some(information) = &sense.information {
+                                    info.push(information.clone());
+                                }
+                                if let Some(xref) = &sense.xref {
+                                    // xref sometimes looks like "お手・おて・１"; no idea why. Just
+                                    // take the first element:
+                                    if let Some(first) = xref.split("・").nth(0) {
+                                        info.push(format!("see also: {}", first));
+                                    }
+                                }
+
+                                if !info.is_empty() {
+                                    let info_string: String = info.join(", ");
+                                    ui.horizontal_top(|ui| {
+                                        ui.add(
+                                            Label::new(
+                                                RichText::new(format!("{}.", count))
+                                                    .small()
+                                                    .color(Color32::TRANSPARENT),
+                                            )
+                                            .selectable(false),
+                                        );
+                                        ui.horizontal_wrapped(|ui| {
+                                            ui.label(
+                                                RichText::new(format!("{}", info_string))
+                                                    .size(app::TINY_TEXT_SIZE * 0.9)
+                                                    .color(app::SECONDARY_TEXT_COLOR),
+                                            );
+                                        });
+                                    });
+                                }
+
+                                count += 1;
                             }
 
-                            ui.horizontal_wrapped(|ui| {
-                                ui.label(
-                                    RichText::new(format!("{}.", count))
-                                        .small()
-                                        .color(app::SECONDARY_TEXT_COLOR),
-                                );
-                                ui.label(
-                                    RichText::new(format!("{}", sense.glosses.join(", "))).small(),
+                            ui.add_space(app::SPACING_SIZE * 0.5);
+
+                            let percent: f32 = 0.8;
+                            let width: f32 = ui.available_width() * percent;
+                            let margin: f32 = (ui.available_width() - width) / 2.0;
+
+                            ui.horizontal(|ui| {
+                                ui.add_space(margin);
+                                let rect: egui::Rect = ui.allocate_space(egui::vec2(width, 1.0)).1;
+                                ui.painter().line_segment(
+                                    [rect.left_center(), rect.right_center()],
+                                    egui::Stroke::new(
+                                        1.0,
+                                        Color32::from_rgba_premultiplied(20, 20, 20, 20),
+                                    ),
                                 );
                             });
 
-                            let mut info: Vec<String> = Vec::new();
-                            if let Some(misc) = &sense.misc {
-                                // Turn from CamelCase into regular sentence
-                                let mut misc_readable = String::new();
-                                for c in misc.chars() {
-                                    if misc_readable.is_empty() {
-                                        misc_readable.push(c);
-                                    } else {
-                                        if c.is_uppercase() {
-                                            misc_readable.push(' ');
-                                            misc_readable
-                                                .push_str(&c.to_lowercase().collect::<String>());
-                                        } else {
-                                            misc_readable.push(c);
-                                        }
-                                    }
-                                }
-                                info.push(misc_readable);
-                            }
-                            if let Some(information) = &sense.information {
-                                info.push(information.clone());
-                            }
-                            if let Some(xref) = &sense.xref {
-                                // xref sometimes looks like "お手・おて・１"; no idea why. Just
-                                // take the first element:
-                                if let Some(first) = xref.split("・").nth(0) {
-                                    info.push(format!("see also: {}", first));
-                                }
-                            }
-
-                            if !info.is_empty() {
-                                let info_string: String = info.join(", ");
-                                ui.horizontal_top(|ui| {
-                                    ui.add(
-                                        Label::new(
-                                            RichText::new(format!("{}.", count))
-                                                .small()
-                                                .color(Color32::TRANSPARENT),
-                                        )
-                                        .selectable(false),
-                                    );
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.label(
-                                            RichText::new(format!("{}", info_string))
-                                                .size(app::TINY_TEXT_SIZE * 0.9)
-                                                .color(app::SECONDARY_TEXT_COLOR),
-                                        );
-                                    });
-                                });
-                            }
-
-                            count += 1;
+                            ui.add_space(app::SPACING_SIZE * 0.5);
                         }
 
-                        ui.add_space(app::SPACING_SIZE * 0.5);
-
-                        let percent: f32 = 0.8;
-                        let width: f32 = ui.available_width() * percent;
-                        let margin: f32 = (ui.available_width() - width) / 2.0;
-
-                        ui.horizontal(|ui| {
-                            ui.add_space(margin);
-                            let rect: egui::Rect = ui.allocate_space(egui::vec2(width, 1.0)).1;
-                            ui.painter().line_segment(
-                                [rect.left_center(), rect.right_center()],
-                                egui::Stroke::new(
-                                    1.0,
-                                    Color32::from_rgba_premultiplied(20, 20, 20, 20),
-                                ),
-                            );
-                        });
-
-                        ui.add_space(app::SPACING_SIZE * 0.5);
+                        /* });*/
                     }
-
-                    /* });*/
-                }
-                Err(e) => tracing::debug!("Could not display token due to error: {e}"),
-            };
+                    Err(e) => tracing::debug!("Could not display token due to error: {e}"),
+                };
+            }
         }
     }
 

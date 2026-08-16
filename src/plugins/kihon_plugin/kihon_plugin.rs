@@ -1,3 +1,5 @@
+use ahash::AHashMap;
+use ahash::HashMap;
 use egui::Color32;
 use egui::Label;
 use egui::RichText;
@@ -14,6 +16,10 @@ use crate::app::SPACING_SIZE;
 use crate::plugin::Plugin;
 use crate::plugin::Token;
 use crate::plugin::change_progress;
+use crate::plugins::generic_plugin::anki_helper;
+use crate::plugins::generic_plugin::generic_helper::{
+    GenericFrequency, GenericFurigana, GenericMeaning, GenericTerm, GenericWord,
+};
 use crate::plugins::kihon_plugin::jmdict_dictionary::AltForm;
 use crate::plugins::kihon_plugin::jmdict_dictionary::DictionaryFurigana;
 use crate::plugins::kihon_plugin::jmdict_dictionary::{
@@ -25,8 +31,11 @@ const ATTRIBUTIONS_URL: &str =
     "https://github.com/jasmine-blush/popup_dictionary?tab=readme-ov-file#licensing--attributions";
 
 pub struct KihonPlugin {
-    tokens: Vec<Token>,
+    tokens: Box<[Token]>,
+    selected_token: Option<usize>,
     dictionary: Dictionary,
+    terms: HashMap<Token, GenericTerm>,
+    sentence: String,
 }
 
 impl Plugin for KihonPlugin {
@@ -47,7 +56,20 @@ impl Plugin for KihonPlugin {
             change_progress(&progress, "Tokenizing...");
             let tokens = tokenize(&sentence.to_string(), &dictionary)?;
 
-            Ok(Self { tokens, dictionary })
+            let terms: AHashMap<Token, GenericTerm> = AHashMap::with_capacity(tokens.len());
+
+            let sentence: String = tokens
+                .iter()
+                .map(|t| t.input_word.clone())
+                .collect::<Vec<String>>()
+                .join("");
+            Ok(Self {
+                tokens: tokens.into_boxed_slice(),
+                selected_token: None,
+                dictionary,
+                terms: terms.into(),
+                sentence,
+            })
         })();
 
         match result {
@@ -60,21 +82,66 @@ impl Plugin for KihonPlugin {
         }
     }
 
-    fn get_tokens(&self) -> &Vec<Token> {
+    fn get_tokens(&self) -> &[Token] {
         &self.tokens
     }
 
-    fn display_token(
-        &self,
-        ui: &mut Ui,
-        frame: &egui::containers::Frame,
-        app: &MyApp,
-        token: &Token,
-    ) {
+    fn select(&mut self, index: usize) -> Result<(), Box<dyn Error>> {
+        if self.tokens.len() > index {
+            self.selected_token = Some(index);
+            let token = &self.tokens[index];
+            if !self.terms.contains_key(token) {
+                let term = self.build_term_for_token(token);
+                self.terms.insert(token.to_owned(), term);
+            }
+            return Ok(());
+        }
+
+        tracing::error!(
+            "Could not select the token at index {} as that index is out of range.",
+            index
+        );
+        Err(Box::from(format!(
+            "Could not select the token at index {} as that index is out of range.",
+            index
+        )))
+    }
+
+    fn get_selected(&self) -> Option<&Token> {
+        if let Some(index) = self.selected_token {
+            return self.tokens.get(index);
+        }
+        None
+    }
+
+    fn get_selected_idx(&self) -> Option<usize> {
+        self.selected_token
+    }
+
+    fn display_selected(&self, ui: &mut Ui, frame: &egui::containers::Frame, app: &MyApp) {
+        if let Some(token) = self.get_selected() {
+            if let Some(term) = self.terms.get(token) {
+                if let Some(definition_to_add_to_anki) =
+                    crate::plugins::generic_plugin::display_helper::display_term(app, ui, term)
+                {
+                    if let Some(token) = self.get_selected() {
+                        _ = anki_helper::add_note(
+                            &self.sentence,
+                            &token.input_word,
+                            &definition_to_add_to_anki,
+                        );
+                    }
+                }
+            }
+        }
+
+        return;
+
+        /*
         let forms_string: String = token
             .conjugations
             .iter()
-            .map(|form| crate::plugins::kihon_plugin::jumandic_tokenizer::get_form(form))
+            .map(|form| crate::plugins::kihon_plugin::jumandic_tokenizer::get_conjform(form))
             .collect::<Vec<&str>>()
             .join(", ");
         if forms_string != "*" {
@@ -116,7 +183,13 @@ impl Plugin for KihonPlugin {
                     &token.input_word
                 ))
             {
-                self.display_terms_prioritized(ui, app, &token.input_word, &dictionary_entry);
+                self.display_terms_prioritized(
+                    ui,
+                    app,
+                    &token,
+                    &token.input_word,
+                    &dictionary_entry,
+                );
             } else if let Some(dictionary_entry) = self
                 .dictionary
                 .lookup(&token.deinflected_word)
@@ -125,7 +198,13 @@ impl Plugin for KihonPlugin {
                     &token.deinflected_word
                 ))
             {
-                self.display_terms_prioritized(ui, app, &token.deinflected_word, &dictionary_entry);
+                self.display_terms_prioritized(
+                    ui,
+                    app,
+                    &token,
+                    &token.deinflected_word,
+                    &dictionary_entry,
+                );
             } else {
                 let mut base_minus_one: String = token.deinflected_word.clone();
                 _ = base_minus_one.pop();
@@ -135,7 +214,13 @@ impl Plugin for KihonPlugin {
                         &base_minus_one
                     ))
                 {
-                    self.display_terms_prioritized(ui, app, &base_minus_one, &dictionary_entry);
+                    self.display_terms_prioritized(
+                        ui,
+                        app,
+                        &token,
+                        &base_minus_one,
+                        &dictionary_entry,
+                    );
                 } else {
                     let mut surface_minus_one: String = token.input_word.clone();
                     _ = surface_minus_one.pop();
@@ -148,6 +233,7 @@ impl Plugin for KihonPlugin {
                         self.display_terms_prioritized(
                             ui,
                             app,
+                            &token,
                             &surface_minus_one,
                             &dictionary_entry,
                         );
@@ -157,6 +243,7 @@ impl Plugin for KihonPlugin {
 
             //ui.add_space(app::SPACING_SIZE * 4.0);
         });
+        */
     }
 
     fn open(&self, ctx: &egui::Context) {
@@ -173,10 +260,296 @@ impl Plugin for KihonPlugin {
 }
 
 impl KihonPlugin {
+    fn build_term_for_token(&self, token: &Token) -> GenericTerm {
+        let conjforms: Vec<String> = token
+            .conjugations
+            .iter()
+            .map(|form| {
+                crate::plugins::kihon_plugin::jumandic_tokenizer::get_conjform(form).to_owned()
+            })
+            .collect::<Vec<String>>();
+
+        /*
+         * Lookup in database in this order until exists:
+         * 1. surface                                     -- first
+         * 2. base
+         * 3. base minus last letter (e.g. 素敵な)
+         * 4. surface minus last letter                -- last
+         */
+        let mut word: String = String::new();
+        let mut prioritized_terms: Vec<DictionaryTerm> = Vec::new();
+        if let Some(dictionary_entry) = self.dictionary.lookup(&token.input_word).expect(&format!(
+            "Error getting from database when looking up surface: {}",
+            &token.input_word
+        )) {
+            word = token.input_word.clone();
+            prioritized_terms = self.build_terms_prioritized(&word, &dictionary_entry);
+        } else if let Some(dictionary_entry) = self
+            .dictionary
+            .lookup(&token.deinflected_word)
+            .expect(&format!(
+                "Error getting from database when looking up base: {}",
+                &token.deinflected_word
+            ))
+        {
+            word = token.deinflected_word.clone();
+            prioritized_terms = self.build_terms_prioritized(&word, &dictionary_entry);
+        } else {
+            let mut base_minus_one: String = token.deinflected_word.clone();
+            _ = base_minus_one.pop();
+            if let Some(dictionary_entry) =
+                self.dictionary.lookup(&base_minus_one).expect(&format!(
+                    "Error getting from database when looking up base-1: {}",
+                    &base_minus_one
+                ))
+            {
+                word = base_minus_one;
+                prioritized_terms = self.build_terms_prioritized(&word, &dictionary_entry);
+            } else {
+                let mut surface_minus_one: String = token.input_word.clone();
+                _ = surface_minus_one.pop();
+                if let Some(dictionary_entry) =
+                    self.dictionary.lookup(&surface_minus_one).expect(&format!(
+                        "Error getting from database when looking up surface-1: {}",
+                        &surface_minus_one
+                    ))
+                {
+                    word = surface_minus_one;
+                    prioritized_terms = self.build_terms_prioritized(&word, &dictionary_entry);
+                }
+            }
+        }
+
+        // Convert DictionaryTerms to a GenericTerm
+        // Each DictionaryTerm loosely translates to one GenericDefinition
+        let mut term: GenericTerm = GenericTerm::new(word, conjforms);
+        for dictionary_term in prioritized_terms {
+            let kanji: Option<String> =
+                (!dictionary_term.term.is_empty()).then_some(dictionary_term.term);
+            let furigana: Option<Vec<GenericFurigana>> = dictionary_term.furigana.map(|v| {
+                v.iter()
+                    .map(|f| GenericFurigana {
+                        base: f.ruby.clone(),
+                        reading: f.rt.clone().unwrap_or(f.ruby.clone()),
+                    })
+                    .collect()
+            });
+            let kana: String = dictionary_term.reading;
+
+            let (bccwj, jiten) = dictionary_term.frequency.get_all();
+            let mut frequencies: Vec<GenericFrequency> = Vec::new();
+            if let Some(frequency) = bccwj {
+                frequencies.push(GenericFrequency {
+                    source: "BCCWJ".to_string(),
+                    rank: frequency,
+                });
+            }
+            if let Some(frequency) = jiten {
+                frequencies.push(GenericFrequency {
+                    source: "Jiten".to_string(),
+                    rank: frequency,
+                });
+            }
+            let frequencies: Option<Vec<GenericFrequency>> =
+                (!frequencies.is_empty()).then_some(frequencies);
+
+            let mut meanings: Vec<GenericMeaning> = Vec::new();
+            for meaning in dictionary_term.meanings {
+                meanings.push(GenericMeaning::new(
+                    meaning.gloss,
+                    meaning.tags,
+                    (!meaning.info.is_empty()).then_some(meaning.info),
+                ));
+            }
+
+            let mut forms: Vec<GenericWord> = Vec::new();
+            for alt_form in dictionary_term.alt_forms {
+                let alt_kanji: Option<String> =
+                    (!alt_form.term.is_empty()).then_some(alt_form.term);
+                let alt_furigana: Option<Vec<GenericFurigana>> = alt_form.furigana.map(|v| {
+                    v.iter()
+                        .map(|f| GenericFurigana {
+                            base: f.ruby.clone(),
+                            reading: f.rt.clone().unwrap_or(f.ruby.clone()),
+                        })
+                        .collect()
+                });
+                let alt_kana: String = alt_form.reading;
+
+                forms.push(GenericWord::new(alt_kanji, alt_furigana, alt_kana));
+            }
+            let forms: Option<Vec<GenericWord>> = (!forms.is_empty()).then_some(forms);
+
+            term.add_definition(
+                GenericWord::new(kanji, furigana, kana),
+                frequencies,
+                meanings,
+                forms,
+            );
+        }
+
+        term
+    }
+
+    fn build_terms_prioritized(&self, token: &str, entry: &DictionaryEntry) -> Vec<DictionaryTerm> {
+        let mut all_terms: Vec<DictionaryTerm> = entry.terms.clone();
+
+        // go through all terms for this token's dictionary entry
+        let init_len: usize = all_terms.len();
+        for i in 0..init_len {
+            let curr_alt_forms = all_terms[i].alt_forms.clone();
+            for alt_form in curr_alt_forms {
+                if all_terms
+                    .iter()
+                    .find(|t| {
+                        t.term == alt_form.term
+                            && t.reading == alt_form.reading
+                            && t.furigana == alt_form.furigana
+                    })
+                    .is_none()
+                {
+                    let lookup_string = if alt_form.term.is_empty() {
+                        &alt_form.reading
+                    } else {
+                        &alt_form.term
+                    };
+                    if let Some(dictionary_entry) =
+                        self.dictionary.lookup(lookup_string).expect(&format!(
+                            "Error getting from database when looking up alt_form: {:?}, with: {}",
+                            alt_form, lookup_string
+                        ))
+                    {
+                        for term in dictionary_entry.terms {
+                            if term.term == alt_form.term
+                                && term.reading == alt_form.reading
+                                && term.furigana == alt_form.furigana
+                                && term.id == all_terms[i].id
+                            {
+                                all_terms.push(term);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // now all_terms has its terms + the terms for all its alt forms
+
+        // iterate through all_terms
+        let mut filtered_terms: Vec<DictionaryTerm> = Vec::new();
+        for term in &all_terms {
+            // for each term, if a term is in filtered_terms that has this term as an alt form
+            if let Some((i, existing_term)) = filtered_terms.iter().enumerate().find(|(_i, t)| {
+                let alt_form = AltForm {
+                    term: term.term.clone(),
+                    reading: term.reading.clone(),
+                    furigana: term.furigana.clone(),
+                };
+                t.alt_forms.contains(&alt_form) && t.id == term.id
+            }) {
+                // switch entry in filtered_terms to the one with best frequency
+                if let Some(frequency) = term.frequency.get_for_cmp() {
+                    if let Some(existing_frequency) = existing_term.frequency.get_for_cmp() {
+                        if frequency < existing_frequency {
+                            filtered_terms[i] = term.clone();
+                        }
+                    } else {
+                        filtered_terms[i] = term.clone();
+                    }
+                } else {
+                    if existing_term.frequency.get_for_cmp().is_none()
+                        && term.common
+                        && !existing_term.common
+                    {
+                        filtered_terms[i] = term.clone();
+                    }
+                }
+            } else {
+                // otherwise just push the next term
+                filtered_terms.push(term.clone());
+            }
+        }
+        // now we have a vec of all terms, with only the form/alt form with the best frequency
+
+        // then sort the terms. priorities are:
+        // 1. terms that match token
+        //   a. best frequency
+        //   b. no frequency + common
+        //   c. no frequency - common
+        // 2. no terms (no kanji) and readings match token
+        //   -||-
+        // 3. has terms (kanji) and readings match token
+        //   -||-
+        // 4. all others
+        //   -||-
+        filtered_terms.sort_unstable_by(|a, b| {
+            let a_weighted_frequency = match a.frequency.get_for_cmp() {
+                Some(frequency) => frequency,
+                None => {
+                    if a.common {
+                        usize::MAX - 1
+                    } else {
+                        usize::MAX
+                    }
+                }
+            };
+            let b_weighted_frequency = match b.frequency.get_for_cmp() {
+                Some(frequency) => frequency,
+                None => {
+                    if b.common {
+                        usize::MAX - 1
+                    } else {
+                        usize::MAX
+                    }
+                }
+            };
+
+            if a.term == token {
+                if b.term == token {
+                    return a_weighted_frequency.cmp(&b_weighted_frequency);
+                } else {
+                    return 0.cmp(&1);
+                }
+            } else {
+                if b.term == token {
+                    return 1.cmp(&0);
+                }
+            }
+
+            if a.term.is_empty() && a.reading == token {
+                if b.term.is_empty() && b.reading == token {
+                    return a_weighted_frequency.cmp(&b_weighted_frequency);
+                } else {
+                    return 0.cmp(&1);
+                }
+            } else {
+                if b.term.is_empty() && b.reading == token {
+                    return 1.cmp(&0);
+                }
+            }
+
+            if a.reading == token {
+                if b.reading == token {
+                    return a_weighted_frequency.cmp(&b_weighted_frequency);
+                } else {
+                    return 0.cmp(&1);
+                }
+            } else {
+                if b.reading == token {
+                    return 1.cmp(&0);
+                }
+            }
+
+            a_weighted_frequency.cmp(&b_weighted_frequency)
+        });
+
+        filtered_terms
+    }
+
     fn display_terms_prioritized(
         &self,
         ui: &mut Ui,
         app: &MyApp,
+        actual_token: &Token,
         token: &str,
         entry: &DictionaryEntry,
     ) {
@@ -311,10 +684,17 @@ impl KihonPlugin {
             a_weighted_frequency.cmp(&b_weighted_frequency)
         });
 
-        Self::display_terms(ui, app, token, &filtered_terms);
+        self.display_terms(ui, app, &actual_token, token, &filtered_terms);
     }
 
-    fn display_terms(ui: &mut Ui, app: &MyApp, token: &str, terms: &Vec<DictionaryTerm>) {
+    fn display_terms(
+        &self,
+        ui: &mut Ui,
+        app: &MyApp,
+        actual_token: &Token,
+        token: &str,
+        terms: &Vec<DictionaryTerm>,
+    ) {
         for (id, dictionary_term) in terms.iter().enumerate() {
             ui.horizontal(|ui| {
                 if !dictionary_term.term.is_empty() {
@@ -350,7 +730,17 @@ impl KihonPlugin {
                             dictionary_term.reading.to_owned()
                         };
 
-                        app.copy_text_safe(term);
+                        app.copy_text_safe(&term);
+                    }
+                    if ui
+                        .add(egui::Button::new(
+                            RichText::new("\u{2295}").size(app::TINY_TEXT_SIZE),
+                        ))
+                        .on_hover_text(RichText::new("Add term to Anki").size(app::TINY_TEXT_SIZE))
+                        .clicked()
+                    {
+                        // Anki button
+                        //_ = anki_helper::add_note(&self.get_tokens(), &actual_token)
                     }
                 });
             });

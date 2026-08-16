@@ -20,7 +20,7 @@ const CONJ_FORMS: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "基本条件形" => "", // 行けば
 };
 
-pub fn get_form(form: &str) -> &str {
+pub fn get_conjform(form: &str) -> &str {
     match CONJ_FORMS.get(form) {
         Some(description) => description,
         None => form,
