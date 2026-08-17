@@ -147,6 +147,8 @@ All in all, a command could look something like this:
 [WIP]  
 Contributions welcome!
 
+(See CONTRIBUTIONS.md)
+
 ## Licensing & Attributions
 This project is licensed under the **GNU General Public License v3.0**.
 
