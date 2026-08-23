@@ -12,11 +12,15 @@ use crate::{
 pub fn add_note(
     sentence: &str,
     surface: &str,
+    surface_form: &str,
     definition: &GenericDefinition,
 ) -> Result<(), Box<dyn Error>> {
     let mut sentence = sentence.replace(surface, &format!("<b>{}</b>", surface));
 
-    let word = definition.get_word();
+    let word = match get_surface_altform(surface_form, definition.get_forms()) {
+        Some(word) => word,
+        None => definition.get_word(),
+    };
 
     let mut meanings = String::new();
     let mut counter: usize = 0;
@@ -81,6 +85,35 @@ pub fn add_note(
     }
     if !meanings.is_empty() {
         meanings.push_str("</ol></div>");
+    }
+
+    if let Some(forms) = definition.get_forms() {
+        meanings.push_str("<div>");
+        meanings.push_str("<span style=\"font-weight: bold; font-size: 0.8em; color: white; background-color: rgb(86, 86, 86); vertical-align: text-bottom; border-radius: 0.3em; margin-right: 0.25em; padding: 0.2em 0.3em; word-break: keep-all; cursor: help;\" title=\"spelling and reading variants\">forms</span>");
+        meanings.push_str("<ul data-sc-content=\"forms\" >");
+        let ruby = if definition.get_word().get_surface() == surface_form {
+            &format!("<u>{}</u>", definition.get_word().get_ruby())
+        } else {
+            &definition.get_word().get_ruby()
+        };
+        meanings.push_str(&format!(
+            "<li style=\"margin-top: 0.5rem; padding-left: 0.25em; list-style-type: &quot;1.&quot;;\">{}</li>",
+            ruby
+        ));
+        for (index, form) in forms.iter().enumerate() {
+            let ruby = if form.get_surface() == surface_form {
+                &format!("<u>{}</u>", form.get_ruby())
+            } else {
+                &form.get_ruby()
+            };
+            meanings.push_str(&format!(
+                "<li style=\"margin-top: 0.5rem; padding-left: 0.25em; list-style-type: &quot;{}.&quot;;\">{}</li>",
+                (index + 2),
+                ruby
+            ));
+        }
+
+        meanings.push_str("</ul></div>");
     }
 
     let primary_definition = format!(
@@ -154,7 +187,7 @@ pub fn add_note(
                     "Key": word.get_surface(),
                     "Word": word.get_surface(),
                     "WordReading": get_word_furigana_string(word),
-                    "PAOverride": "-1",
+                    //"PAOverride": "-1",
                     "PrimaryDefinition": primary_definition,
                     "Sentence": sentence,
                     "FrequenciesStylized": frequencies,
@@ -209,4 +242,18 @@ fn get_word_furigana_string(word: &GenericWord) -> String {
         }
     }
     word.get_kana().to_owned()
+}
+
+fn get_surface_altform<'a>(
+    surface: &str,
+    alt_forms: &'a Option<Vec<GenericWord>>,
+) -> Option<&'a GenericWord> {
+    if let Some(alt_forms) = alt_forms {
+        for form in alt_forms {
+            if form.get_surface() == surface {
+                return Some(form);
+            }
+        }
+    }
+    None
 }

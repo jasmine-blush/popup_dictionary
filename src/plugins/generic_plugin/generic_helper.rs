@@ -156,6 +156,25 @@ impl GenericWord {
     pub fn get_kana(&self) -> &str {
         &self.kana
     }
+
+    pub fn get_ruby(&self) -> String {
+        if let Some(kanji) = self.get_kanji() {
+            let mut ruby_string = String::new();
+            for furigana in &kanji.1 {
+                if furigana.base == furigana.reading {
+                    ruby_string.push_str(&format!("<ruby>{}</ruby>", furigana.reading));
+                } else {
+                    ruby_string.push_str(&format!(
+                        "<ruby>{}<rt>{}</rt></ruby>",
+                        furigana.base, furigana.reading
+                    ));
+                }
+            }
+            ruby_string
+        } else {
+            format!("<ruby>self.get_kana()</ruby>")
+        }
+    }
 }
 
 // A unit of furigana describes the reading of a (set of) character(s)

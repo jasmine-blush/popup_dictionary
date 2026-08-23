@@ -128,6 +128,7 @@ impl Plugin for KihonPlugin {
                         _ = anki_helper::add_note(
                             &self.sentence,
                             &token.input_word,
+                            &term.surface,
                             &definition_to_add_to_anki,
                         );
                     }
