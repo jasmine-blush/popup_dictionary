@@ -63,7 +63,7 @@ fn display_definitions<'a>(
             if let Some(kanji) = definition.get_kanji() {
                 display_kanji_with_furigana(ui, &kanji.0, &kanji.1, 1.0, false);
             } else {
-                ui.label(RichText::new(definition.get_kana()).heading());
+                ui.label(RichText::new(definition.get_kana()).size(app::BIG_TEXT_SIZE));
             }
 
             // Show buttons on the right
@@ -137,10 +137,12 @@ fn display_definitions<'a>(
             ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(format!("{}.", counter))
-                        .small()
+                        .size(app::SMALL_TEXT_SIZE)
                         .color(app::SECONDARY_TEXT_COLOR),
                 );
-                ui.label(RichText::new(meaning.get_glosses().join(", ")).small());
+                ui.label(
+                    RichText::new(meaning.get_glosses().join(", ")).size(app::SMALL_TEXT_SIZE),
+                );
             });
 
             // Display extra info

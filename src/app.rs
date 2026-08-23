@@ -795,7 +795,8 @@ impl eframe::App for MyApp {
                                         if ui
                                             .add(egui::Button::selectable(
                                                 self.active_plugin_index == idx,
-                                                RichText::new(active_plugin.name()),
+                                                RichText::new(active_plugin.name())
+                                                    .size(PRIMARY_TEXT_SIZE),
                                             ))
                                             .clicked()
                                         {
