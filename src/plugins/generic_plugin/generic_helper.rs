@@ -172,7 +172,7 @@ impl GenericWord {
             }
             ruby_string
         } else {
-            format!("<ruby>self.get_kana()</ruby>")
+            format!("<ruby>{}</ruby>", self.get_kana())
         }
     }
 }
