@@ -104,10 +104,10 @@ impl Plugin for JotobaPlugin {
                                         "Kanji {} without furigana in Jotoba response.",
                                         kanji
                                     );
-                                    ui.label(RichText::new(kanji).heading()); //.size(22.0));
+                                    ui.label(RichText::new(kanji).size(app::BIG_TEXT_SIZE)); //.size(22.0));
                                 } else {
                                     ui.label(
-                                        RichText::new(&word.reading.kana).heading(), //.size(22.0)
+                                        RichText::new(&word.reading.kana).size(app::BIG_TEXT_SIZE), //.size(22.0)
                                     );
                                 }
                             }
@@ -145,12 +145,12 @@ impl Plugin for JotobaPlugin {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.label(
                                         RichText::new(format!("{}.", count))
-                                            .small()
+                                            .size(app::SMALL_TEXT_SIZE)
                                             .color(app::SECONDARY_TEXT_COLOR),
                                     );
                                     ui.label(
                                         RichText::new(format!("{}", sense.glosses.join(", ")))
-                                            .small(),
+                                            .size(app::SMALL_TEXT_SIZE),
                                     );
                                 });
 
@@ -191,7 +191,7 @@ impl Plugin for JotobaPlugin {
                                         ui.add(
                                             Label::new(
                                                 RichText::new(format!("{}.", count))
-                                                    .small()
+                                                    .size(app::SMALL_TEXT_SIZE)
                                                     .color(Color32::TRANSPARENT),
                                             )
                                             .selectable(false),
