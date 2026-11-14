@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
+use std::str::{Lines, Split};
 use std::sync::{Arc, Mutex};
 
 use crate::plugin::change_progress;
@@ -53,6 +54,7 @@ pub struct DictionaryTerm {
     pub reading: String,
     pub alt_forms: Vec<AltForm>,
     pub furigana: Option<Vec<DictionaryFurigana>>,
+    pub pitch: Option<Vec<u8>>,
     pub meanings: Vec<DictionaryMeaning>,
 }
 
@@ -171,6 +173,7 @@ struct Dependencies {
     jiten: String,
     furigana: String,
     simplified: String,
+    kanjium: String
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -179,7 +182,7 @@ struct FrequencyKey<'c> {
     reading: &'c str,
 }
 
-const DB_VERSION_FLAG: &str = "db_version_005";
+const DB_VERSION_FLAG: &str = "db_version_006";
 
 impl Dictionary {
     pub fn load_dictionary(
@@ -330,9 +333,19 @@ impl Dictionary {
             result.unwrap()
         });
 
+        let kanjium_pitch_handle = std::thread::spawn(|| {
+            tracing::debug!("Downloading Kanjium.");
+
+            let result = crate::plugins::kihon_plugin::dependencies::get_kanjium();
+            if let Err(ref e) = result {
+                tracing::error!("{}", e);
+            }
+            result.unwrap()
+        });
+
         change_progress(
             progress,
-            "Downloading datasets [1/4]. \nThis may take a few minutes.",
+            "Downloading datasets [1/5]. \nThis may take a few minutes.",
         );
         let jiten_frequency = jiten_frequency_handle
             .join()
@@ -340,7 +353,7 @@ impl Dictionary {
         tracing::debug!("jiten-moe successfully downloaded.");
         change_progress(
             progress,
-            "Downloading datasets [2/4]. \nThis may take a few minutes.",
+            "Downloading datasets [2/5]. \nThis may take a few minutes.",
         );
         let jmdict_furigana = jmdict_furigana_handle
             .join()
@@ -348,7 +361,7 @@ impl Dictionary {
         tracing::debug!("jmdict-furigana successfully downloaded.");
         change_progress(
             progress,
-            "Downloading datasets [3/4]. \nThis may take a few minutes.",
+            "Downloading datasets [3/5]. \nThis may take a few minutes.",
         );
         let bccwj_frequency = bccwj_frequency_handle
             .join()
@@ -356,18 +369,28 @@ impl Dictionary {
         tracing::debug!("bccwj-combined successfully downloaded.");
         change_progress(
             progress,
-            "Downloading datasets [4/4]. \nThis may take a few minutes.",
+            "Downloading datasets [4/5]. \nThis may take a few minutes.",
         );
         let jmdict_simplified = jmdict_simplified_handle
             .join()
             .map_err(|e| format!("Could not download jmdict-simplified"))?;
         tracing::debug!("jmdict-simplified successfully downloaded.");
+        change_progress(
+            progress,
+            "Downloading datasets [5/5]. \nThis may take a few minutes.",
+        );
+        let kanjium_pitch = kanjium_pitch_handle
+            .join()
+            .map_err(|e| format!("Could not download kanjium"))?;
+        tracing::debug!("kanjium successfully downloaded.");
+
 
         Ok(Dependencies {
             bccwj: bccwj_frequency,
             jiten: jiten_frequency,
             furigana: jmdict_furigana,
             simplified: jmdict_simplified,
+            kanjium: kanjium_pitch
         })
     }
 
@@ -378,10 +401,10 @@ impl Dictionary {
     ) -> Result<(), Box<dyn Error>> {
         change_progress(
             &progress,
-            "Parsing datasets [0/4]. \nThis may take a few minutes.",
+            "Parsing datasets [0/5]. \nThis may take a few minutes.",
         );
 
-        let (bccwj_res, jiten_res, furigana_res, jmdict_res) = std::thread::scope(|s| {
+        let (bccwj_res, jiten_res, furigana_res, jmdict_res, kanjium_res) = std::thread::scope(|s| {
             let jmdict_simplified_handle = s.spawn(|| {
                 tracing::debug!("Parsing jmdict-simplified.");
 
@@ -406,9 +429,15 @@ impl Dictionary {
                 Self::parse_jiten_frequencies(&dependencies.jiten).unwrap()
             });
 
+            let kanjium_pitch_handle = s.spawn(|| {
+                tracing::debug!("Parsing kanjium.");
+
+                Self::parse_kanjium_pitch(&dependencies.kanjium)
+            });
+
             change_progress(
                 &progress,
-                "Parsing datasets [1/4]. \nThis may take a few minutes.",
+                "Parsing datasets [1/5]. \nThis may take a few minutes.",
             );
             let jiten_res: AHashMap<FrequencyKey, usize> = jiten_frequency_handle
                 .join()
@@ -417,7 +446,7 @@ impl Dictionary {
             tracing::debug!("jiten-moe successfully parsed.");
             change_progress(
                 &progress,
-                "Parsing datasets [2/4]. \nThis may take a few minutes.",
+                "Parsing datasets [2/5]. \nThis may take a few minutes.",
             );
             let furigana_res: AHashMap<(&str, &str), Vec<Furigana>> = jmdict_furigana_handle
                 .join()
@@ -426,7 +455,7 @@ impl Dictionary {
             tracing::debug!("jmdict-furigana successfully parsed.");
             change_progress(
                 &progress,
-                "Parsing datasets [3/4]. \nThis may take a few minutes.",
+                "Parsing datasets [3/5]. \nThis may take a few minutes.",
             );
             let bccwj_res: AHashMap<FrequencyKey, usize> = bccwj_frequency_handle
                 .join()
@@ -435,14 +464,22 @@ impl Dictionary {
             tracing::debug!("bccwj-combined successfully parsed.");
             change_progress(
                 &progress,
-                "Parsing datasets [4/4]. \nThis may take a few minutes.",
+                "Parsing datasets [4/5]. \nThis may take a few minutes.",
             );
-
             let jmdict_res: JMDict = jmdict_simplified_handle
                 .join()
                 .map_err(|e| format!("Error while parsing jmdict-simplified: {:?}", e))
                 .unwrap();
             tracing::debug!("jmdict-simplified successfully parsed.");
+            change_progress(
+                &progress,
+                "Parsing datasets [5/5]. \nThis may take a few minutes.",
+            );
+            let kanjium_res: AHashMap<(&str, &str), Vec<u8>> = kanjium_pitch_handle
+                .join()
+                .map_err(|e| format!("Error while parsing kanjium: {:?}", e))
+                .unwrap();
+            tracing::debug!("kanjium successfully parsed.");
 
             Ok::<
                 (
@@ -450,15 +487,17 @@ impl Dictionary {
                     AHashMap<FrequencyKey, usize>,
                     AHashMap<(&str, &str), Vec<Furigana>>,
                     JMDict,
+                    AHashMap<(&str, &str), Vec<u8>>
                 ),
                 Box<dyn Error>,
-            >((bccwj_res, jiten_res, furigana_res, jmdict_res))
+            >((bccwj_res, jiten_res, furigana_res, jmdict_res, kanjium_res))
         })?;
 
         let bccwj_frequency_map: AHashMap<FrequencyKey, usize> = bccwj_res;
         let jiten_frequency_map: AHashMap<FrequencyKey, usize> = jiten_res;
         let furigana_map: AHashMap<(&str, &str), Vec<Furigana>> = furigana_res;
         let jmdict: JMDict = jmdict_res;
+        let kanjium_map: AHashMap<(&str, &str), Vec<u8>> = kanjium_res;
 
         change_progress(
             &progress,
@@ -518,6 +557,8 @@ impl Dictionary {
                                     .collect::<Vec<DictionaryFurigana>>()
                             });
 
+                        let pitch: Option<Vec<u8>> = kanjium_map.get(&(kanji.text.as_str(), kana.text.as_str())).cloned();
+
                         terms.push((
                             DictionaryKey::Term(kanji.text.clone()),
                             DictionaryTerm {
@@ -528,6 +569,7 @@ impl Dictionary {
                                 reading: reading.clone(),
                                 alt_forms: Vec::new(),
                                 furigana: furigana.clone(),
+                                pitch: pitch.clone(),
                                 meanings: meanings.clone(),
                             },
                         ));
@@ -545,6 +587,7 @@ impl Dictionary {
                                 reading,
                                 alt_forms: Vec::new(),
                                 furigana,
+                                pitch,
                                 meanings: meanings.clone(),
                             },
                         ));
@@ -571,6 +614,8 @@ impl Dictionary {
 
                     let reading = kana.text.clone();
 
+                    let pitch: Option<Vec<u8>> = kanjium_map.get(&(kana.text.as_str(), kana.text.as_str())).cloned();
+
                     let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
                         &word
                             .sense
@@ -593,6 +638,7 @@ impl Dictionary {
                             reading,
                             alt_forms: Vec::new(),
                             furigana: None,
+                            pitch,
                             meanings,
                         },
                     ));
@@ -650,6 +696,8 @@ impl Dictionary {
 
                     let reading = kana.text.clone();
 
+                    let pitch: Option<Vec<u8>> = kanjium_map.get(&(kana.text.as_str(), kana.text.as_str())).cloned();
+
                     let meanings: Vec<DictionaryMeaning> = Self::build_meanings(
                         &word
                             .sense
@@ -672,6 +720,7 @@ impl Dictionary {
                             reading,
                             alt_forms: Vec::new(),
                             furigana: None,
+                            pitch,
                             meanings,
                         },
                     ));
@@ -811,6 +860,24 @@ impl Dictionary {
         }
 
         Ok(furigana_map)
+    }
+
+    fn parse_kanjium_pitch(pitch_tsv: &str) -> AHashMap<(&str, &str), Vec<u8>> {
+        let mut map: AHashMap<(&str, &str), Vec<u8>> = AHashMap::with_capacity(130000);
+        for line in pitch_tsv.lines() {
+            let mut columns: Split<'_, char> = line.split('\t');
+            let (Some(term), Some(reading), Some(accents)) = (columns.next(), columns.next(), columns.next()) else {
+                continue;
+            };
+
+            let reading: &str = if reading.is_empty() { term } else { reading };
+            let downsteps: Option<Vec<u8>> = accents.split(',').map(|a| a.parse().ok()).collect();
+            if let Some(downsteps) = downsteps {
+                map.insert((term, reading), downsteps);
+            }
+        }
+
+        map
     }
 
     fn build_meanings(

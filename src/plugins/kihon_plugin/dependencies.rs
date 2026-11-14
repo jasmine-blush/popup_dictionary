@@ -39,6 +39,9 @@ const MANGA_OCR_VOCAB_URL: &str = "https://huggingface.co/mayocream/manga-ocr-on
 const MANGA_OCR_VOCAB_HASH: &str =
     "5cb5c5586d98a2f331d9f8828e4586479b0611bfba5d8c3b6dadffc84d6a36a3";
 
+const KANJIUM_URL: &str = "https://github.com/mifunetoshiro/kanjium/raw/9ebca4589565c696e7c39e089e2e928ad65f678c/data/source_files/raw/accents.txt";
+const KANJIUM_HASH: &str = "8bd0dd127dab32ceec94cb03ab1ba6b68858ea73421dfa1731af2f373deb4f20";
+
 pub fn fetch_jumandic(destination_path: &PathBuf) -> Result<(), Box<dyn Error>> {
     let response = reqwest::blocking::get(JUMANDIC_URL)?;
 
@@ -152,6 +155,10 @@ pub fn fetch_manga_ocr_vocab(destination_path: &PathBuf) -> Result<(), Box<dyn E
     fetch_file(destination_path, MANGA_OCR_VOCAB_URL, MANGA_OCR_VOCAB_HASH)?;
 
     Ok(())
+}
+
+pub fn get_kanjium() -> Result<String, Box<dyn Error>> {
+    fetch_string(KANJIUM_URL, KANJIUM_HASH)
 }
 
 fn try_remove_file(path: PathBuf) {

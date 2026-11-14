@@ -176,6 +176,16 @@ pub fn add_note(
     } else {
         ""
     };
+
+    let mut pitches: String = String::new();
+    if let Some(patterns) = definition.get_word().get_pitch() {
+        pitches.push_str("<ol><li>");
+        for pattern in patterns {
+            pitches.push_str(&format!("<span style=\"display:inline;\"><span>[</span><span>{}</span><span>]</span></span>", pattern));
+        }
+        pitches.push_str("</li></ol>");
+    }
+
     let anki_payload = json!({
         "action": "addNote",
         "version": 6,
@@ -192,6 +202,7 @@ pub fn add_note(
                     "Sentence": sentence,
                     "FrequenciesStylized": frequencies,
                     "FrequencySort": frequency_sort,
+                    "PAPositions": pitches,
                     "PASilence": "[sound:_silence.wav]",
                     "WordReadingHiragana": word.get_kana(),
                 },

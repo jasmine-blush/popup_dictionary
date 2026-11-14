@@ -160,6 +160,7 @@ Upon first use of the ``Kihon`` plugin, the following datasets are downloaded an
  - **Word Frequencies:** The BCCWJ SUW and BCCWJ LUW combined provided by [**Kuuuube/yomitan-dictionaries**](https://github.com/Kuuuube/yomitan-dictionaries) and the [**Jiten Frequency List**](https://jiten.moe/other).
    - **Balanced Corpus of Contemporary Written Japanese (BCCWJ):** The combined version is based on the SUW and LUW Frequency Lists by the [**National Institute for Japanese Language and Linguistics**](https://clrd.ninjal.ac.jp/bccwj/en/freq-list.html).
    - **Jiten:** The [**Jiten.moe**](https://jiten.moe/) Frequency Lists by [**Sirush**](https://github.com/Sirush), used in accordance with the [**CC BY-SA 4.0 License**](https://creativecommons.org/licenses/by-sa/4.0/). For proper version control, [**my repository**](https://github.com/jasmine-blush/jiten-moe-frequency) is used for the actual dependency download.
+ - **Kanjium:** The accents.txt containing pitch accent pattern data in tsv format from [**mifunetoshiro/kanjium**](https://github.com/mifunetoshiro/kanjium) under the [**CC BY-SA 4.0 License**](https://creativecommons.org/licenses/by-sa/4.0/).
 
 When using the ``Kihon`` plugin, the following is used:
  - **Vibrato:** The Vibrato tokenizer provided by [**daac-tools/vibrato**](https://github.com/daac-tools/vibrato) under the **MIT License**. For tokenization the [jumandic-mecab-7_0](https://github.com/daac-tools/vibrato/releases/download/v0.5.0/jumandic-mecab-7_0.tar.xz) file is downloaded (if not already present).

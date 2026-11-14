@@ -1,4 +1,4 @@
-use egui::{Color32, Label, RichText, Ui};
+use egui::{Color32, Label, Pos2, RichText, Stroke, Ui};
 
 use crate::{
     app::{self, MyApp},
@@ -66,7 +66,14 @@ fn display_definitions<'a>(
                 ui.label(RichText::new(definition.get_kana()).size(app::BIG_TEXT_SIZE));
             }
 
-            // Show buttons on the right
+
+        // Display pitch graphs
+        if let Some(pitches) = definition.get_pitches() {
+                ui.add_space(app::SPACING_SIZE * 2.0);
+                for pitch in pitches {
+                    display_pitch_graph(ui, definition.get_morae(), &pitch)
+                }
+        }            // Show buttons on the right
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(app::SPACING_SIZE);
 
@@ -91,6 +98,8 @@ fn display_definitions<'a>(
                 }
             });
         });
+
+
 
         // Display frequency tags
         if let Some(frequencies) = definition.get_frequencies() {
@@ -458,3 +467,51 @@ fn display_tag(ui: &mut Ui, text: &str, tooltip: &str) {
         app::PRIMARY_TEXT_COLOR,
     );
 }
+
+fn display_pitch_graph(ui: &mut Ui, morae: &Vec<String>, pitch: &Vec<bool>) {
+    let font = egui::FontId::proportional(app::TINY_TEXT_SIZE);
+    let mora_galleys: Vec<_> = morae.iter().map(|mora| {
+        ui.fonts_mut(|f| f.layout_no_wrap(mora.to_owned(), font.clone(), app::LIGHT_TEXT_COLOR))
+    }).collect();
+
+    let cell_width: f32 = mora_galleys.iter().map(|g| g.size().x).fold(0.0, f32::max) + 2.0;
+    let text_height: f32 = mora_galleys.iter().map(|g| g.size().y).fold(0.0, f32::max);
+    let graph_padding: f32 = 3.0 + 1.5;
+    let graph_height: f32 = 10.0 + (2.0 * graph_padding);
+
+    let size = egui::vec2(cell_width * (morae.len() + 1) as f32, graph_height + text_height);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
+    response.on_hover_text(RichText::new("test").size(app::TINY_TEXT_SIZE));
+
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+
+    let high_y: f32 = rect.top() + graph_padding;
+    let low_y: f32 = high_y + 10.0;
+    let points: Vec<Pos2> = pitch.iter().enumerate().map(|(i, &high)| {
+        egui::pos2(rect.left() + cell_width * (i as f32 + 0.5), if high { high_y } else { low_y })
+    }).collect();
+
+    let painter = ui.painter();
+    let stroke = Stroke::new(1.5, Color32::LIGHT_GREEN);
+
+    let mut line_points: Vec<Pos2> = points.clone();
+    if let [.., before, particle] = line_points.as_mut_slice() {
+        let direction = (*particle - *before).normalized();
+        *particle -= direction * 3.0;
+    }
+    painter.add(egui::Shape::line(line_points, stroke));
+
+    let (particle_point, mora_points) = points.split_last().unwrap();
+    for point in mora_points {
+        painter.circle_filled(*point, 3.0, Color32::LIGHT_GREEN);
+    }
+    painter.circle_stroke(*particle_point, 3.0, stroke);
+
+    for (i, galley) in mora_galleys.into_iter().enumerate() {
+        let pos = egui::pos2(rect.left() + cell_width * (i as f32 + 0.5) - (galley.size().x / 2.0), rect.top() + graph_height);
+        painter.galley(pos, galley, Color32::LIGHT_GREEN);
+    }
+}
+

@@ -354,6 +354,8 @@ impl KihonPlugin {
             let frequencies: Option<Vec<GenericFrequency>> =
                 (!frequencies.is_empty()).then_some(frequencies);
 
+            let pitch: Option<Vec<u8>> = dictionary_term.pitch.clone();
+
             let mut meanings: Vec<GenericMeaning> = Vec::new();
             for meaning in dictionary_term.meanings {
                 meanings.push(GenericMeaning::new(
@@ -377,12 +379,12 @@ impl KihonPlugin {
                 });
                 let alt_kana: String = alt_form.reading;
 
-                forms.push(GenericWord::new(alt_kanji, alt_furigana, alt_kana));
+                forms.push(GenericWord::new(alt_kanji, alt_furigana, alt_kana, None));
             }
             let forms: Option<Vec<GenericWord>> = (!forms.is_empty()).then_some(forms);
 
             term.add_definition(
-                GenericWord::new(kanji, furigana, kana),
+                GenericWord::new(kanji, furigana, kana, pitch),
                 frequencies,
                 meanings,
                 forms,

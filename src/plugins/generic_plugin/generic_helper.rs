@@ -66,6 +66,14 @@ impl GenericDefinition {
     pub fn get_kana(&self) -> &str {
         &self.word.kana
     }
+    
+    pub fn get_morae(&self) -> &Vec<String> {
+        &self.word.get_morae()
+    }
+    
+    pub fn get_pitches(&self) -> Option<Vec<Vec<bool>>> {
+        self.word.get_pitches()
+    }
 
     pub fn get_word(&self) -> &GenericWord {
         &self.word
@@ -93,12 +101,20 @@ pub struct GenericWord {
     // Every word has a kana representation
     // e.g. できる
     kana: String,
+
+    // The pronunciation of a word is made up of one or multiple sounds called On or mora
+    // e.g. きゅうじつ -> [きゅ, う, じ, つ]
+    morae: Vec<String>,
+
+    // A word is pronounced with one or multiple possible pitch accents
+    pitch: Option<Vec<u8>>
 }
 impl GenericWord {
     pub fn new(
         kanji: Option<String>,
         furigana: Option<Vec<GenericFurigana>>,
         kana: String,
+        pitch: Option<Vec<u8>>
     ) -> GenericWord {
         let kanji_opt: Option<(String, Vec<GenericFurigana>)> = kanji.map(|k| {
             (
@@ -124,9 +140,21 @@ impl GenericWord {
                 },
             )
         });
+
+        const SMALL: &str = "ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ";
+        let mut morae: Vec<String> = Vec::new();
+        for c in kana.chars() {
+            match morae.last_mut() {
+                Some(prev) if SMALL.contains(c) => prev.push(c),
+                _ => morae.push(c.to_string()),
+            }
+        }      
+
         GenericWord {
             kanji: kanji_opt,
             kana,
+            morae,
+            pitch
         }
     }
 
@@ -174,6 +202,36 @@ impl GenericWord {
         } else {
             format!("<ruby>{}</ruby>", self.get_kana())
         }
+    }
+
+    pub fn get_morae(&self) -> &Vec<String> {
+        &self.morae
+    }
+    
+    pub fn get_pitch(&self) -> &Option<Vec<u8>> {
+        &self.pitch
+    }
+
+    pub fn get_pitches(&self) -> Option<Vec<Vec<bool>>> {
+        if let Some(pitch) = self.get_pitch() {
+            let morae: &Vec<String> = self.get_morae();
+            let mora_count: usize = morae.len();
+
+            let mut all_pitches: Vec<Vec<bool>> = Vec::with_capacity(pitch.len());
+            for pattern in pitch {
+                let pitches: Vec<bool> = (0..=mora_count).map(|i| match pattern {
+                    0 => i != 0,                        // heiban: low, then high
+                    1 => i == 0,                        // atamadaka: high, then low
+                    _ => i != 0 && i < mora_count       // nakadaka / odaka: low, then high until pattern
+                }).collect::<Vec<bool>>();
+
+                all_pitches.push(pitches)
+            }
+
+            return Some(all_pitches);
+        }
+        
+        None
     }
 }
 
