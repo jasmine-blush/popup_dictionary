@@ -18,6 +18,7 @@ and this project tries to adhere to [Semantic Versioning](https://semver.org/spe
 - **UI:** Added a button which allows adding a specific definition as a card/note
   to Anki. The feature is currently extremely basic and experimental.
 - **Kihon:** Pitch accent patterns from Kanjium.
+- **Jotoba:** Pitch accent information from the API response.
 - **Generic:** Display of pitch accent patterns next to words.
 
 ### Changed

@@ -66,6 +66,7 @@ pub struct WordsResponse {
 pub struct Word {
     pub reading: Reading,
     pub senses: Vec<Sense>,
+    pub pitch: Option<Vec<PitchPart>>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -101,6 +102,12 @@ pub struct JotobaFurigana {
 pub struct Furigana {
     pub ruby: String,
     pub rt: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PitchPart {
+    pub part: String,
+    pub high: bool
 }
 
 impl<'de> Deserialize<'de> for JotobaFurigana {
